@@ -1,6 +1,8 @@
 # Configurable Crystal Bot
 
-Private implementation candidate for Crystal PvP verification, regional testing, tier lists, support tickets, restrictions, deadlines, and portable backups.
+Configurable implementation candidate for Crystal PvP verification, regional testing, tier lists, support tickets, restrictions, deadlines, and portable backups.
+
+**Full package:** [Download the ZIP with compiled files and PDF setup guide](full-package/full-package.zip), or [read the PDF guide](docs/Full-Setup-Guide.pdf).
 
 **Status:** code builds and automated local checks run. It has not been connected to a live Discord server or a real Supabase/PostgreSQL deployment. Rehearse in a test server before production cutover. See `docs/STATUS.md` for the remaining release checks.
 
@@ -63,7 +65,7 @@ Enable the migration module and place a standardized JSON file in `data/imports`
 
 Run `npm ci`, `npm test`, then `npm run package`. The ZIP contains compiled runtime files, not local credentials, configuration, databases, or archives. `npm run validate` checks the local configuration without connecting to Discord.
 
-The original detailed behavior specification remains in the workspace's `outputs` folder. Source changes and production credentials remain private; no public release or license has been selected.
+The source repository is public. Production credentials and live configuration belong only on the host and are excluded by `.gitignore`. No project license has been selected.
 
 ## Linux / PM2
 
