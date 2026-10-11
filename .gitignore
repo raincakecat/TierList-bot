@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+data/
+.env
+.env.*
+!.env.example
+config.json
+*.log
+local-policy.json

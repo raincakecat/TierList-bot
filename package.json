@@ -1,0 +1,29 @@
+{
+  "name": "configurable-crystal-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.17.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file-if-exists=.env dist/src/main.js",
+    "validate": "node --env-file-if-exists=.env dist/src/main.js validate",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "package": "npm run test && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.117.3",
+    "discord.js": "14.27.0",
+    "pg": "8.23.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/pg": "8.23.1",
+    "fflate": "0.8.3",
+    "pg-mem": "3.0.14",
+    "typescript": "7.0.2"
+  }
+}
