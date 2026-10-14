@@ -10,7 +10,7 @@ export function player(s:State,id:string):Player {
   return s.players[id]??(s.players[id]={id,tier:'Unranked',uuid:null,ign:null,region:null,preferredServer:null,waitlist:false,cooldownUntil:0});
 }
 export function enqueue(s:State,kind:Job['kind'],data:Job['data'],now:number,id:string=randomUUID()):string {
-  s.jobs[id]??={id,kind,data,status:'pending',attempts:0,nextAt:now,checkpoints:{}};return id;
+  s.jobs[id]??={id,kind,data,status:'pending',attempts:0,nextAt:now,createdAt:now,checkpoints:{}};return id;
 }
 export function restricted(s:State,p:Player,now:number):boolean{return s.restrictions.some(r=>(r.playerId===p.id||r.uuid===p.uuid)&&(r.until===null||r.until>now));}
 export function currentTicket(s:State,id:string):Ticket|undefined{return Object.values(s.tickets).find(t=>t.opener===id&&t.type==='test'&&t.status!=='closed');}

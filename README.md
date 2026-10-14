@@ -16,7 +16,7 @@ Configurable implementation candidate for Crystal PvP verification, regional tes
 6. Choose a database. Supabase is the example default; follow the database instructions below. Never commit `.env` or your live configuration.
 7. Choose cooldowns explicitly: `"0"` means none, or use values such as `"7d"`. Disable quotas or choose a monthly quota. Enable only the modules and regions you need.
 8. Put the bot's role above every role it will assign. Enable **Server Members**, **Message Content**, and **Presence** privileged intents in the Discord Developer Portal. Invite with `bot` and `applications.commands` scopes and the permissions described below.
-9. Run `npm start`. A Discord administrator uses `/setup preview`, then `/setup apply` and confirms the preview. You can supply existing resource IDs, create missing ones, or combine both. Setup saves each successful creation to `config.json`.
+9. Run `npm start`. A Discord administrator opens `/setup wizard` to choose settings and resource mappings, then reviews the attached draft and confirms. `/setup preview` and `/setup apply` remain available. You can supply existing resource IDs, create missing ones, or combine both. Setup saves each successful creation to `config.json`.
 10. Run `/config validate`. Fix reported problems before publishing panels or opening tests. `/panels refresh` updates the configured panels.
 
 Normal operation requires Manage Channels, Manage Roles, View Channel, Send Messages, Read Message History, Attach Files, Embed Links, Add Reactions, Mention Everyone (for the agreed regional announcement), and Manage Messages (pinning opening messages). Grant these in the appropriate channels. The bot never needs a personal Discord account token.
@@ -36,6 +36,10 @@ The first persistence implementation stores a versioned community state document
 Edit the local JSON file and run `/config reload`. The bot checks the new file and Discord resources before changing the active configuration. Database/server changes require stopping the bot and a reviewed transfer. Resource mapping and feature changes require maintenance. Old tickets keep their saved access roles and archive channel. Disabling creation does not remove existing tickets.
 
 Neutral branding and messages are editable through documented `{placeholders}`. Normal and high cooldowns can be disabled explicitly; quotas have their own module switch. NA/EU/AS can be enabled individually. The tier-list module requires all five list channels.
+
+The private `/setup wizard` edits a draft until confirmation. Its screens cover community name/timezone, modules/regions, cooldowns/quota/capacity, and role/channel/category IDs. Blank resource mappings request creation. Drafts expire after 15 minutes; confirmations after 5 minutes. On initialized installations it requires Owner and maintenance before applying. Database credentials and the initial server ID remain host-side. Custom support policies and templates remain editable in JSON.
+
+`/health` is private to Bot Admin/Owner and reports database connectivity, uptime, recovery fencing, maintenance, saved jobs, the last successful automatic backup, and configuration problem counts. It omits credentials and raw backend errors. Legacy jobs without a creation timestamp use their scheduled time for the oldest-work indicator.
 
 ## Testing and support
 
@@ -57,6 +61,8 @@ Daily portable database backups retain the latest ten successful automatic backu
 
 Owner commands: `/backup export`, `/backup restore`, `/backup transfer`. Restore/transfer require maintenance, a preview, and confirmation. Transfer writes to an empty destination, verifies its state, and keeps the source in maintenance. Stop the source process before switching configuration and starting the destination. Backups exclude credentials and runtime leases.
 
+Restore and transfer fence new state-changing operations and wait up to 30 seconds for active jobs/actions to finish before recovery begins. Process lease renewal continues. A waiting timeout starts no recovery and leaves maintenance enabled; retry with a new confirmation after resolving long-running work. Restoring state does not undo external Discord messages or deleted channels.
+
 ## Optional migration
 
 Enable the migration module and place a standardized JSON file in `data/imports`. See `docs/MIGRATION.md`. Use `/migration preview`, correct blocking issues, then `/migration apply` in maintenance. The import is one-time; `/migration retry` reschedules saved failed operations without repeating successful database imports. Stop the old bot/database writers before any live takeover.
@@ -64,6 +70,8 @@ Enable the migration module and place a standardized JSON file in `data/imports`
 ## Develop from source
 
 Run `npm ci`, `npm test`, then `npm run package`. The ZIP contains compiled runtime files, not local credentials, configuration, databases, or archives. `npm run validate` checks the local configuration without connecting to Discord.
+
+GitHub Actions builds/tests on Windows and Linux and verifies a clean full-package installation. Run `node scripts/load-check.mjs` after building for the repeatable SQLite volume/concurrency check. See [load measurements](docs/LOAD-CHECKS.md), [command permissions](docs/COMMANDS.txt), [live Discord rehearsal](docs/LIVE-REHEARSAL.md), and [remote database rehearsal](docs/DATABASE-REHEARSAL.md). Live checks remain pending until test infrastructure is provided.
 
 The source repository is public. Production credentials and live configuration belong only on the host and are excluded by `.gitignore`. No project license has been selected.
 

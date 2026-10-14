@@ -1,0 +1,66 @@
+CRYSTAL BOT COMMANDS - 0.1.1
+
+Owner inherits the bot's configured permission groups. Ticket tools still require access to the ticket. Support closure uses the responsible type's closing groups and its Close button.
+
+MEMBERS
+/profile [member] - Saved player profile.
+/leave - Leave queue.
+Verify Account / Enter Waitlist / Join Queue / support type menu - Player buttons and menus.
+
+VERIFIED TESTER (also needs Staff for testing work)
+/start region - Start regional testing session.
+/stop - Stop session.
+/next - Open next eligible FIFO test.
+
+STAFF
+/passeval - Pass evaluation; continue HT3 test.
+/skip - Skip before evaluation passes.
+/close tier - Finish test or discontinue.
+/format tier - Fight-result Markdown template.
+/add member /remove member - Manage added participants.
+/rename name - Rename current ticket.
+/addht3 /addlt2 - Select eligible regional opponent.
+/set-ticket type member [tester] - Adopt existing channel.
+/changeticket type [tester] - Change permitted ticket route.
+/uuid ign - UUID lookup.
+/stats [member] /testerstats - Monthly statistics.
+/testerlb [period] - Monthly, weekly, or all-time leaderboard.
+/ht3list list /lt2list list /ht2list list /lt1list list /ht1list list - View members.
+
+BOT ADMIN
+/health - Private database, jobs, backup, recovery and configuration health.
+/unverify member - Unlink Minecraft association; keep Discord rank/cooldown.
+/addtester member /stoptester member - Manage tester authorization.
+/resetcooldown member /setcooldown member days - Individual cooldown.
+/configcooldown kind duration - Future test cooldown; 0 disables.
+/configquota count - Monthly quota; 0 disables.
+/panels refresh - Refresh configured request panels/lists/queues.
+/migration preview filename - Read-only legacy import preview when enabled.
+Bot Review controls - Correct supported missing import metadata.
+
+REGULATOR
+/deadline set duration /deadline clear - 1m to 14d; notify setter, no automatic close.
+/forcestopqueue region - Clear regional sessions/queue.
+/forcetest member region - Bypass queue/cooldown; restrictions still enforced.
+/forceresult member tier region [ign] - Assign outside active test.
+/migrate member tier region source [ign] - Assign migrated rank.
+
+RESTRICTION KEY
+/restrict member ign reason [duration] - Restrict account pair, remove list/queue membership.
+/unrestrict member - Remove pair restriction.
+
+LIST ADMIN
+/ht3list add|remove member region and equivalent lt2/ht2/lt1/ht1 commands - Manage regional membership.
+
+OWNER (initial setup allows Discord Administrator before initialization)
+/setup wizard - Private draft setup/configuration screens, review and confirmation.
+/setup preview /setup apply - Existing resource creation workflow.
+/config validate /config reload - Validate settings/Discord resources; reload reviewed file.
+/maintenance enabled - Maintenance control.
+/backup export /backup restore filename /backup transfer config - Portable recovery.
+/migration apply filename /migration retry - One-time import/resume and saved job retry.
+/reset member - Reset player, preserving restrictions/archives.
+/forceresetcooldowns - Clear all cooldowns.
+/forceclosetickets - Discontinue/archive active open tickets.
+
+Wizard changes on initialized installations require maintenance. Drafts expire after 15 minutes and confirmations after 5 minutes. Database credentials and initial server ID remain on the host. Backup restore/transfer drain active work with a 30-second waiting limit and keep maintenance enabled.

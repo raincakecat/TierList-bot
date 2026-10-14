@@ -15,8 +15,11 @@ import { lookupMinecraft } from '../minecraft.js';
 import { commandDefinitions } from './commands.js';
 import { Gateway } from './gateway.js';
 import { provision, setupPreview, validateDiscord } from './setup.js';
+import { WizardSessions, requireWizard, wizardPolicy, wizardView, wizardModal } from './wizard.js';
+import { healthSummary } from './health.js';
+import { alreadyVerified } from './verification.js';
 
-type Pending={actor:string;expires:number;fingerprint:string;action:()=>Promise<string>;group:'owner'|'setup'};
+type Pending={actor:string;expires:number;fingerprint:string;action:()=>Promise<string>;group:'owner'|'setup';recovery?:boolean};
 export class Runtime {
   private service:Service;
   private gateway:Gateway;
@@ -29,6 +32,8 @@ export class Runtime {
   private lastRefresh=0;
   private setupErrors:string[]=[];
   private editingImports=new Set<string>();
+  private wizard=new WizardSessions();
+  private startedAt=Date.now();
   constructor(private client:Client,private file:ConfigFile,private store:Store){
     this.service=new Service(store,()=>file.value);this.gateway=new Gateway(client,store,()=>file.value);
     this.worker=new Worker(store,(job,save)=>this.gateway.job(job,save),j=>this.gateway.failure(j));
@@ -44,22 +49,24 @@ export class Runtime {
     this.timers.push(setInterval(()=>void this.renew().catch(()=>{this.running=false;console.error('Database lease unavailable; stopping Discord connection.');this.client.destroy();}),15_000));
     this.client.on('interactionCreate',i=>void this.interact(i));
     this.client.on('guildMemberRemove',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.store.change(s=>{s.departures??=[];if(!s.departures.includes(m.id))s.departures.push(m.id);removeQueue(s,m.id);enqueue(s,'queues',{},Date.now());}).catch(()=>console.error('Member departure could not be recorded.'));});
-    this.client.on('guildMemberAdd',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.store.read().then(async s=>{if(s.players[m.id])await this.gateway.playerRoles(s.players[m.id]!);}).catch(()=>console.error('Member role restoration needs review.'));});
+    this.client.on('guildMemberAdd',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.store.operations.shared(async()=>{const s=await this.store.read();if(s.players[m.id])await this.gateway.playerRoles(s.players[m.id]!);}).catch(()=>console.error('Member role restoration needs review.'));});
     this.client.on('guildMemberUpdate',(old,m)=>{if(m.guild.id!==this.file.value.community.guildId||this.gateway.synchronizingRoles.has(m.id))return;const configured=Object.values(this.file.value.tierRoleIds).filter(Boolean);if(configured.some(id=>old.roles.cache.has(id!)!==m.roles.cache.has(id!))||this.file.value.permissionGroups.verifiedTester.some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id))||this.file.value.permissionGroups.staff.some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id)))void this.reconcileMember(m.id).catch(()=>console.error('Member role reconciliation needs review.'));});
     console.log('Crystal bot connected.');
   }
-  private async renew(){await this.store.change(s=>{if(s.runtimeLease?.owner!==this.lease)throw new Error('Instance lease lost');s.runtimeLease.until=Date.now()+60_000;});}
-  private async loop(){if(!this.running||this.busy)return;this.busy=true;try{
+  private async renew(){await this.store.renewLease(this.lease,Date.now()+60_000);}
+  private async loop(){if(this.store.operations.recovering)return;return this.store.operations.shared(()=>this.cycle());}
+  private async cycle(){if(!this.running||this.busy)return;this.busy=true;try{
     await this.service.tick();await this.worker.runOnce();const now=Date.now(),s=await this.store.read();
     if(s.initialized&&!readiness(this.file.value).length&&now-this.lastRefresh>60_000){await this.gateway.queues();this.lastRefresh=now;}
-    if(now-(s.lastAutomaticBackupAt??0)>86_400_000){await new Backups(this.store,this.file.value.backups.directory).create(true);await this.gateway.cleanupImages();await this.store.change(s=>s.lastAutomaticBackupAt=now);}
+    if(now-(s.lastAutomaticBackupAt??0)>86_400_000){await new Backups(this.store,this.file.value.backups.directory).create(true);await this.store.change(s=>s.lastAutomaticBackupAt=now);await this.gateway.cleanupImages();}
     const channelId=this.file.value.channels.staffActionLog;if(channelId)await this.store.change(state=>{for(const e of state.audit)if(!state.jobs[`audit-${e.id}`])enqueue(state,'notice',{channelId,content:`${new Date(e.at).toISOString()} | ${e.actor} | ${e.action} | ${e.target}`},now,`audit-${e.id}`);});
     if(this.file.value.modules.testerQuotas&&s.initialized){const month=previousMonth(now,this.file.value.community.timezone),jobId=`quota-${month}`;if(!s.jobs[jobId])await this.store.change(state=>{const rows=Object.values(state.players).filter(p=>p.testerSince&&dateKey(p.testerSince,this.file.value.community.timezone).slice(0,7)<month).map(p=>{const count=state.completions.filter(e=>e.tester===p.id&&dateKey(e.at,this.file.value.community.timezone).slice(0,7)===month).length;return `<@${p.id}>: ${count} / ${this.file.value.testing.monthlyTesterQuota}`;});enqueue(state,'notice',{channelId:this.file.value.channels.quotaReports,content:`Monthly tester quota report: ${month}\n${rows.join('\n')||'No eligible testers this period.'}`},now,jobId);});}
     if(!s.maintenance)for(const id of s.departures??[]){const tickets=Object.values(s.tickets).filter(t=>t.opener===id&&t.status==='open');const internal:Actor={id:'system',roles:this.file.value.permissionGroups.owner,administrator:false,channelAccess:true};for(const t of tickets)await this.service.close(internal,t.id,'discontinued','Member left the server');await this.store.change(state=>{if(!Object.values(state.tickets).some(t=>t.opener===id&&t.status==='opening'))state.departures=(state.departures??[]).filter(x=>x!==id);});}
     for(const [id,p]of this.pending)if(p.expires<now)this.pending.delete(id);
   }finally{this.busy=false;}}
   async stop(){this.running=false;for(const t of this.timers)clearInterval(t);while(this.busy)await new Promise(resolve=>setTimeout(resolve,50));await this.store.change(s=>{if(s.runtimeLease?.owner===this.lease)delete s.runtimeLease;});this.client.destroy();await this.store.close();}
-  private async reconcileMember(id:string){if(this.gateway.synchronizingRoles.has(id))return;const c=this.file.value,guild=await this.gateway.guild(),m=await guild.members.fetch({user:id,force:true});if(this.gateway.synchronizingRoles.has(id))return;
+  private async reconcileMember(id:string){return this.store.operations.shared(()=>this.reconcileMemberNow(id));}
+  private async reconcileMemberNow(id:string){if(this.gateway.synchronizingRoles.has(id))return;const c=this.file.value,guild=await this.gateway.guild(),m=await guild.members.fetch({user:id,force:true});if(this.gateway.synchronizingRoles.has(id))return;
     await this.store.change(s=>{if(!s.initialized||s.maintenance)return;const p=player(s,id),highest=[...TIERS].reverse().find(t=>t!=='Unranked'&&c.tierRoleIds[t]&&m.roles.cache.has(c.tierRoleIds[t]!))??'Unranked';if(highest!==p.tier){p.tier=highest;syncLists(s,p,Date.now());s.audit.push({id:randomUUID(),at:Date.now(),actor:'system',action:'tier-role-reconciled',target:id});enqueue(s,'roles',{playerId:id},Date.now());enqueue(s,'lists',{},Date.now());}
       const tester=allowed(c,{id,roles:[...m.roles.cache.keys()],administrator:false},'verifiedTester')&&allowed(c,{id,roles:[...m.roles.cache.keys()],administrator:false},'staff');if(!tester&&s.testers[id]){const r=s.testers[id]!;delete s.testers[id];if(!Object.values(s.testers).includes(r))s.queues[r]=[];enqueue(s,'queues',{},Date.now());}});
   }
@@ -69,21 +76,31 @@ export class Runtime {
     return {id:i.user.id,roles:[...member.roles.cache.keys()],administrator:member.permissions.has(PermissionFlagsBits.Administrator),channelAccess:!!channel?.permissionsFor(member)?.has(PermissionFlagsBits.ViewChannel)};
   }
   private async ticketId(i:Interaction){const t=Object.values((await this.store.read()).tickets).find(t=>t.channelId===i.channelId&&t.status!=='closed');if(!t)throw new UserError('This channel is not a registered ticket.');return t.id;}
-  private async confirm(i:Interaction,a:Actor,description:string,action:()=>Promise<string>,group:Pending['group']='owner'){
-    if(!i.isRepliable())return;const id=randomUUID();this.pending.set(id,{actor:a.id,expires:Date.now()+300_000,fingerprint:JSON.stringify(this.file.value),action,group});
+  private async confirm(i:Interaction,a:Actor,description:string,action:()=>Promise<string>,group:Pending['group']='owner',recovery=false){
+    if(!i.isRepliable())return;const id=randomUUID();this.pending.set(id,{actor:a.id,expires:Date.now()+300_000,fingerprint:JSON.stringify(this.file.value),action,group,recovery});
     await i.editReply({content:description.slice(0,1800),components:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`confirm:${id}`).setLabel('Confirm').setStyle(ButtonStyle.Danger),new ButtonBuilder().setCustomId(`cancel:${id}`).setLabel('Cancel').setStyle(ButtonStyle.Secondary))]});
   }
   private backups(){return new Backups(this.store,this.file.value.backups.directory);}
   async interact(i:Interaction){
     if(!i.isRepliable())return;
+    const pending=i.isButton()&&i.customId.startsWith('confirm:')?this.pending.get(i.customId.split(':')[1]!):undefined;
+    if(pending?.recovery||(i.isChatInputCommand()&&i.commandName==='health'))return this.interactNow(i);
+    if(this.store.operations.recovering){await i.reply({content:'Recovery is waiting for active work or in progress. Try again after it finishes.',flags:MessageFlags.Ephemeral});return;}
+    return this.store.operations.shared(()=>this.interactNow(i));
+  }
+  private async interactNow(i:Interaction){
+    if(!i.isRepliable())return;
     try{
       const a=await this.actor(i);
+      if(await this.wizardInteraction(i,a))return;
       if(i.isButton()&&i.customId.startsWith('review:')){requireGroup(this.file.value,a,'botAdmin');const id=i.customId.split(':')[1]!,review=(await this.store.read()).reviews?.[id];if(!review||review.resolved)throw new UserError('This review has already been resolved.');
         if(['region','openingTier'].includes(review.field)){const options=review.field==='region'?['NA','EU','AS'].filter(r=>this.file.value.regions[r as 'NA'].enabled):[...TIERS];await i.reply({content:review.message,flags:MessageFlags.Ephemeral,components:[new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`reviewvalue:${id}`).setPlaceholder('Choose the corrected value').addOptions(options.map(value=>({label:value,value}))))]});}
         else if(['tester','ign','openingIgn','type','opener'].includes(review.field))await i.showModal(new ModalBuilder().setCustomId(`reviewedit:${id}`).setTitle('Correct Import Record').addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('value').setLabel(`Correct ${review.field}`).setStyle(TextInputStyle.Short).setMaxLength(100).setRequired(true))));
         else await i.reply({content:'Correct this conflict in the import file on the host, then run /migration preview and /migration apply to resume the same import.',flags:MessageFlags.Ephemeral});return;
       }
       if(i.isButton()&&i.customId==='verify'){
+        if(i.channelId!==this.file.value.channels.verificationPanel)throw new UserError('Use the current request-test panel.');
+        const p=(await this.store.read()).players[a.id],linked=p?alreadyVerified(this.file.value,p):null;if(linked){await i.reply({embeds:[linked],flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});return;}
         if(this.setupErrors.length)throw new UserError('An administrator must finish configuration before new requests are accepted.');
         if(!this.file.value.modules.testing)throw new UserError('Testing is disabled.');
         const modal=new ModalBuilder().setCustomId('verification').setTitle('Verify Minecraft Account');
@@ -116,6 +133,7 @@ export class Runtime {
       }else if(i.isChatInputCommand()){
         const o=i.options,c=this.file.value,name=i.commandName,member=()=>o.getUser('member',true).id,str=(key:string)=>o.getString(key,true),ticket=()=>this.ticketId(i);
         switch(name){
+          case 'health':requireGroup(c,a,'botAdmin');reply=await healthSummary(this.store,c,this.startedAt,this.setupErrors.length);break;
           case 'profile':{const id=o.getUser('member')?.id??a.id,p=(await this.store.read()).players[id];if(p){const embed=new EmbedBuilder().setTitle('Player Profile').setColor(c.branding.colors.panel as `#${string}`).addFields({name:'Discord',value:`<@${id}>`},{name:'Minecraft',value:p.ign??'Not linked'},{name:'Rank',value:tierName(p.tier)},{name:'Region',value:p.region??'Not selected'});if(p.uuid)embed.setThumbnail(`https://visage.surgeplay.com/bust/128/${p.uuid}`);await i.editReply({embeds:[embed],allowedMentions:{parse:[]}});return;}reply='This player has no saved profile.';break;}
           case 'leave':await this.service.leave(a);break;
           case 'start':await this.service.start(a,str('region'));reply='Your testing session is active.';break;
@@ -149,7 +167,7 @@ export class Runtime {
           case 'configquota':requireGroup(c,a,'botAdmin');{const next=structuredClone(c),n=o.getInteger('count',true);next.modules.testerQuotas=n>0;next.testing.monthlyTesterQuota=n||null;const errors=readiness(next);if(errors.length)throw new UserError(errors.join('\n'));await this.file.save(next);}break;
           case 'configcooldown':requireGroup(c,a,'botAdmin');{milliseconds(str('duration'));const next=structuredClone(c);next.testing[o.getString('kind')==='high'?'highCooldown':'normalCooldown']=str('duration');await this.file.save(next);}break;
           case 'stats':case 'testerstats':case 'testerlb':requireGroup(c,a,'staff');reply=await this.statistics(name,o.getUser('member')?.id??a.id,o.getString('period')??'monthly');break;
-          case 'setup':{const s=await this.store.read();if(s.initialized)requireGroup(c,a,'owner');else if(!a.administrator)throw new UserError('Discord Administrator permission is required.');if(o.getSubcommand()==='preview')reply=setupPreview(c);else{await this.confirm(i,a,setupPreview(c),async()=>{const guild=await this.gateway.guild();await provision(this.file,guild,a.id,!s.initialized);const errors=await validateDiscord(this.file.value,guild);this.setupErrors=errors;if(errors.length)return `Resources recorded. Finish configuration before enabling requests:\n${errors.join('\n')}`;await this.store.change(s=>s.initialized=true);await this.gateway.panels();return 'Setup completed and panels published.';},'setup');return;}break;}
+          case 'setup':{const s=await this.store.read();if(s.initialized)requireGroup(c,a,'owner');else if(!a.administrator)throw new UserError('Discord Administrator permission is required.');if(o.getSubcommand()==='wizard'){const session=this.wizard.create(c,a,s);await i.editReply(wizardView(session));return;}if(o.getSubcommand()==='preview')reply=setupPreview(c);else{await this.confirm(i,a,setupPreview(c),async()=>{const guild=await this.gateway.guild();await provision(this.file,guild,a.id,!s.initialized);const errors=await validateDiscord(this.file.value,guild);this.setupErrors=errors;if(errors.length)return `Resources recorded. Finish configuration before enabling requests:\n${errors.join('\n')}`;await this.store.change(s=>s.initialized=true);await this.gateway.panels();return 'Setup completed and panels published.';},'setup');return;}break;}
           case 'config':{const s=await this.store.read();if(s.initialized)requireGroup(c,a,'owner');else if(!a.administrator)throw new UserError('Discord Administrator permission is required.');const loaded=await ConfigFile.load(this.file.path);const errors=await validateDiscord(loaded.value,await this.gateway.guild());if(errors.length){reply=errors.join('\n');break;}if(o.getSubcommand()==='reload'){
             if(JSON.stringify(c.database)!==JSON.stringify(loaded.value.database)||c.community.guildId!==loaded.value.community.guildId)throw new UserError('Database and server changes require a stopped bot and a reviewed transfer.');
             const old={...c,templates:null,branding:null,testing:null},next={...loaded.value,templates:null,branding:null,testing:null};if(JSON.stringify(old)!==JSON.stringify(next)&&!s.maintenance)throw new UserError('Enable maintenance before changing resource mappings or features.');
@@ -158,10 +176,10 @@ export class Runtime {
           case 'panels':requireGroup(c,a,'botAdmin');{const errors=await validateDiscord(c,await this.gateway.guild());if(errors.length)throw new UserError(errors.join('\n'));await this.gateway.panels();}break;
           case 'backup':requireGroup(c,a,'owner');if(o.getSubcommand()==='export'){const path=await this.backups().create();reply=`Backup saved on the host: ${basename(path)}.`;}else if(o.getSubcommand()==='transfer'){
             const name=str('config');if(basename(name)!==name||!name.endsWith('.json'))throw new UserError('Use a destination configuration filename in the installation directory.');const dest=await ConfigFile.load(name),snapshot=await this.store.read();if(!snapshot.maintenance)throw new UserError('Enable maintenance first.');if(dest.value.community.guildId!==c.community.guildId)throw new UserError('Destination server must match this installation.');
-            await this.confirm(i,a,`Copy ${Object.keys(snapshot.players).length} players and ${Object.keys(snapshot.tickets).length} tickets to ${dest.value.database.backend}? Destination must be empty. The current database will be backed up and remain in maintenance. Stop the bot before switching configuration.`,async()=>{if(!(await this.store.read()).maintenance)throw new UserError('Maintenance must remain enabled.');const target=await openStore(dest.value);try{const empty=await target.read();if(empty.initialized||empty.runtimeLease||Object.keys(empty.players).length||Object.keys(empty.tickets).length||Object.keys(empty.jobs).length)throw new UserError('Destination is not empty.');const backup=await this.backups().create(),state=decodeBackup(await readFile(backup,'utf8'),snapshot.guildId).state;state.testers={};state.maintenance=true;delete state.runtimeLease;for(const j of Object.values(state.jobs))if(j.status==='working'){j.status='pending';delete j.leaseUntil;}await target.change(s=>Object.assign(s,state));const check=await target.read();if(JSON.stringify(check)!==JSON.stringify(state))throw new Error('Destination verification failed');return 'Transfer verified. Stop this bot, select the destination configuration, restart, then leave maintenance.';}finally{await target.close();}});return;
+            await this.confirm(i,a,`Copy ${Object.keys(snapshot.players).length} players and ${Object.keys(snapshot.tickets).length} tickets to ${dest.value.database.backend}? Destination must be empty. The current database will be backed up and remain in maintenance. Stop the bot before switching configuration.`,async()=>this.store.operations.exclusive(async()=>{if(!(await this.store.read()).maintenance)throw new UserError('Maintenance must remain enabled.');const target=await openStore(dest.value);try{const empty=await target.read();if(empty.initialized||empty.runtimeLease||Object.keys(empty.players).length||Object.keys(empty.tickets).length||Object.keys(empty.jobs).length)throw new UserError('Destination is not empty.');const backup=await this.backups().create(),state=decodeBackup(await readFile(backup,'utf8'),snapshot.guildId).state;state.testers={};state.maintenance=true;delete state.runtimeLease;for(const j of Object.values(state.jobs))if(j.status==='working'){j.status='pending';delete j.leaseUntil;}await target.change(s=>{if(s.initialized||s.runtimeLease||Object.keys(s.players).length||Object.keys(s.tickets).length||Object.keys(s.jobs).length)throw new UserError('Destination is not empty.');Object.assign(s,state);});const check=await target.read();if(JSON.stringify(check)!==JSON.stringify(state))throw new Error('Destination verification failed');return 'Transfer verified. Stop this bot, select the destination configuration, restart, then leave maintenance.';}finally{await target.close();}}),'owner',true);return;
           }else{
             const name=str('filename');if(basename(name)!==name||!name.endsWith('.json'))throw new UserError('Use a JSON filename from the backup directory.');const path=join(c.backups.directory,name),before=await this.store.read();if(!before.maintenance)throw new UserError('Enable maintenance first.');const raw=await readFile(path,'utf8'),backup=decodeBackup(raw,before.guildId),hash=createHash('sha256').update(raw).digest('hex');
-            await this.confirm(i,a,`Restore ${Object.keys(backup.state.players).length} players and ${Object.keys(backup.state.tickets).length} ticket records? The current database will be backed up first.`,async()=>{if(createHash('sha256').update(await readFile(path,'utf8')).digest('hex')!==hash)throw new UserError('Backup changed; preview it again.');await this.backups().restore(path);return 'Backup restored. Maintenance remains enabled.';});return;}break;
+            await this.confirm(i,a,`Restore ${Object.keys(backup.state.players).length} players and ${Object.keys(backup.state.tickets).length} ticket records? The current database will be backed up first.`,async()=>{if(createHash('sha256').update(await readFile(path,'utf8')).digest('hex')!==hash)throw new UserError('Backup changed; preview it again.');await this.backups().restore(path);return 'Backup restored. Maintenance remains enabled.';},'owner',true);return;}break;
           case 'migration':{if(!c.modules.migration)throw new UserError('Migration is disabled.');const sub=o.getSubcommand();requireGroup(c,a,sub==='preview'?'botAdmin':'owner');if(sub==='retry'){await this.store.change(s=>{if(!s.maintenance)throw new UserError('Enable maintenance first.');for(const j of Object.values(s.jobs))if(j.status==='pending'&&j.attempts>0)j.nextAt=0;});reply='Saved failed operations are queued for retry.';break;}
             const filename=str('filename');if(basename(filename)!==filename||!filename.endsWith('.json'))throw new UserError('Use a JSON filename in data/imports.');const path=join('data','imports',filename),raw=await readFile(path,'utf8'),s=await this.store.read(),preview=previewMigration(raw,c,s);reply=`${preview.summary}\n${[...preview.errors,...preview.issues.map(x=>x.message)].join('\n')}`;if(sub==='apply'){if(!s.maintenance)throw new UserError('Enable maintenance first.');if(preview.errors.length)throw new UserError(reply);const guild=await this.gateway.guild();for(const t of preview.data.tickets.filter(t=>preview.readyKeys.includes(`ticket:${t.channelId}`))){const ch=await guild.channels.fetch(t.channelId);if(!ch||ch.type!==ChannelType.GuildText)throw new UserError(`Missing adopted channel ${t.channelId}`);}await this.confirm(i,a,preview.summary+'\nReady records will be imported; unresolved records go to Bot Review. Roles and controls will be updated. A backup will be saved first.',async()=>{if(createHash('sha256').update(await readFile(path,'utf8')).digest('hex')!==preview.hash)throw new UserError('Import changed. Preview it again.');await this.backups().create();await applyMigration(this.store,c,preview,a.id,filename);await this.postReviews(filename,preview);return 'Ready records imported. Unresolved records await Bot Review. Saved Discord operations can retry. Maintenance remains enabled.';});return;}break;}
           default:if(name.endsWith('list')){const tier=name.replace('list','').toUpperCase() as Tier,action=o.getSubcommand();if(action==='list'){requireGroup(c,a,'staff');const s=await this.store.read();reply=['NA','EU','AS'].map(r=>`${r}: ${(s.lists[tier]?.[r as 'NA']??[]).map(id=>`<@${id}>`).join(', ')||'No members listed'}`).join('\n');}else await this.service.list(a,tier,action as 'add'|'remove',member(),str('region'));}else throw new UserError('This command is unavailable.');
@@ -169,10 +187,33 @@ export class Runtime {
       }
       await i.editReply({content:reply.slice(0,1950),allowedMentions:{parse:[]}});
     }catch(error){
-      const message=error instanceof UserError?error.message:'The action could not complete. Check the configuration or ask an administrator to review it.';
+      const message=error instanceof UserError?error.message:error instanceof Error&&error.message.startsWith('Recovery timed out')?error.message:'The action could not complete. Check the configuration or ask an administrator to review it.';
       if(error instanceof Error&&!(error instanceof UserError))console.error(`Action failed: ${error.name}`);
       try{if(i.deferred||i.replied)await i.editReply({content:message.slice(0,1950),components:[],allowedMentions:{parse:[]}});else await i.reply({content:message.slice(0,1950),flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});}catch{}
     }
+  }
+  private async wizardInteraction(i:Interaction,a:Actor):Promise<boolean>{
+    if(!i.isRepliable()||!(i.isButton()||i.isStringSelectMenu()||i.isModalSubmit())||!i.customId.startsWith('wizard:'))return false;
+    const [,id,action]=i.customId.split(':'),state=await this.store.read(),session=this.wizard.find(id!,a,this.file.value,state);
+    if(action==='cancel'){this.wizard.remove(session.id);if(i.isButton())await i.update({content:'Setup draft cancelled. No settings saved.',embeds:[],components:[]});return true;}
+    if(i.isButton()&&['community','policy'].includes(action!)){await i.showModal(wizardModal(session,action!));return true;}
+    if(i.isStringSelectMenu()&&action==='mapping'){await i.showModal(wizardModal(session,'map-'+i.values[0]!));return true;}
+    if(i.isModalSubmit()){const fields:Record<string,string>={};for(const [key,value]of i.fields.fields)if('value' in value&&typeof value.value==='string')fields[key]=value.value;this.wizard.edit(session,action!,fields);await i.reply({...wizardView(session),flags:MessageFlags.Ephemeral});return true;}
+    if(i.isStringSelectMenu()){this.wizard.select(session,action!,i.values);await i.update(wizardView(session));return true;}
+    if(i.isButton()&&action==='review'){
+      const errors=wizardPolicy(session.draft);if(errors.length)throw new UserError(errors.join('\n'));if(state.initialized&&!state.maintenance)throw new UserError('Enable maintenance before applying wizard changes.');
+      await i.deferReply({flags:MessageFlags.Ephemeral});const draft=structuredClone(session.draft),revision=session.revision;
+      const changed=Object.keys(draft).filter(key=>JSON.stringify(draft[key as keyof typeof draft])!==JSON.stringify(this.file.value[key as keyof typeof draft]));
+      await i.editReply({content:'Review the complete draft file and the setup summary before confirming.',files:[{attachment:Buffer.from(JSON.stringify(draft,null,2)),name:'setup-draft.json'}]});
+      await this.confirm(i,a,`Apply setup draft? Changed sections: ${changed.join(', ')||'none'}.\n${setupPreview(draft)}\nThe attached draft is the full configuration; missing resources will be created.`,async()=>this.store.operations.exclusive(async()=>{
+        const current=await this.store.read();requireWizard(this.file.value,a,current);this.wizard.find(session.id,a,this.file.value,current);if(session.revision!==revision)throw new UserError('Draft changed. Review it again.');if(current.initialized&&!current.maintenance)throw new UserError('Maintenance must remain enabled.');
+        if(JSON.stringify((await ConfigFile.load(this.file.path)).value)!==session.fingerprint)throw new UserError('Host configuration changed. Reload and open a new wizard.');
+        const guild=await this.gateway.guild(),invalid=(await validateDiscord(draft,guild)).filter(e=>!e.endsWith('is not configured'));if(invalid.length)throw new UserError('Supplied resources need corrections: '+invalid.join('; '));await this.file.save(draft);this.wizard.remove(session.id);await provision(this.file,guild,a.id,!current.initialized);this.setupErrors=await validateDiscord(this.file.value,guild);
+        if(this.setupErrors.length)return 'Settings and created resources saved. Run /config validate and correct the reported permissions before enabling requests.';
+        await this.store.change(s=>s.initialized=true);await this.gateway.panels();return 'Setup settings confirmed and panels updated. Maintenance remains as previously set.';
+      }),'setup',true);return true;
+    }
+    if(i.isButton()){if(action==='features')session.view='features';else if(action==='resources')session.view='resources';else if(action==='prev')session.resourcePage--;else if(action==='next')session.resourcePage++;else throw new UserError('Unknown wizard control.');await i.update(wizardView(session));return true;}return false;
   }
   private async postReviews(filename:string,preview:Preview){const channel=await this.gateway.text(this.file.value.channels.botReview!);for(const issue of preview.issues){const id=createHash('sha256').update(`${filename}:${issue.key}:${issue.field}`).digest('hex').slice(0,24);const existing=(await this.store.read()).reviews?.[id];if(existing?.messageId&&!existing.resolved)continue;
     const message=await channel.send({embeds:[new EmbedBuilder().setTitle('Import record needs review').setDescription(`${issue.message}\nRecord: ${issue.key}\nFile: ${filename}`).setColor(this.file.value.branding.colors.error as `#${string}`)],components:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`review:${id}`).setLabel('Review / correct').setStyle(ButtonStyle.Primary))],allowedMentions:{parse:[]}});

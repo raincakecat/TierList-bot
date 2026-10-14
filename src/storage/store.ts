@@ -6,6 +6,7 @@ import pg from 'pg';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Config } from '../config.js';
 import { emptyState, type State } from '../domain/types.js';
+import { Operations } from './operations.js';
 
 export interface Snapshot { revision:number; state:State }
 export interface Adapter {
@@ -14,10 +15,16 @@ export interface Adapter {
   close():Promise<void>;
 }
 export class Store {
+  readonly operations=new Operations();
   constructor(public adapter:Adapter){}
   async read():Promise<State>{return (await this.adapter.read()).state;}
   // Mutators are synchronous and side-effect free; a CAS conflict replays them.
   async change<T>(fn:(state:State)=>T):Promise<T>{
+    return this.operations.shared(()=>this.commit(fn));
+  }
+  // Only the process lease bypasses the recovery fence; no domain writes bypass it.
+  async renewLease(owner:string,until:number){return this.commit(s=>{if(s.runtimeLease?.owner!==owner)throw new Error('Instance lease lost');s.runtimeLease.until=until;});}
+  private async commit<T>(fn:(state:State)=>T):Promise<T>{
     for(let attempt=0;attempt<30;attempt++){
       const {revision,state}=await this.adapter.read(),before=JSON.stringify(state);const result=fn(state);
       if(JSON.stringify(state)===before)return result;

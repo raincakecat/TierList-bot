@@ -30,8 +30,8 @@ export class Backups {
     await writeFile(`${file}.tmp`,JSON.stringify(b),{mode:0o600});decodeBackup(await readFile(`${file}.tmp`,'utf8'),state.guildId);await rename(`${file}.tmp`,file);
     if(automatic){const names=(await readdir(this.directory)).filter(n=>/^auto-\d+-[a-f0-9-]+\.json$/.test(n)).sort().reverse();for(const n of names.slice(10))await rm(join(this.directory,n));}return file;
   }
-  async restore(file:string):Promise<void>{const existing=await this.store.read();if(!existing.maintenance)throw new Error('Enable maintenance before restore.');const backup=decodeBackup(await readFile(resolve(file),'utf8'),existing.guildId);await this.create(false);
-    const lease=existing.runtimeLease;backup.state.maintenance=true;backup.state.testers={};for(const j of Object.values(backup.state.jobs))if(j.status==='working'){j.status='pending';delete j.leaseUntil;}if(lease)backup.state.runtimeLease=lease;
-    await this.store.change(s=>{for(const key of Object.keys(s))delete (s as unknown as Record<string,unknown>)[key];Object.assign(s,structuredClone(backup.state));});
-  }
+  async restore(file:string):Promise<void>{return this.store.operations.exclusive(async()=>{const existing=await this.store.read();if(!existing.maintenance)throw new Error('Enable maintenance before restore.');const backup=decodeBackup(await readFile(resolve(file),'utf8'),existing.guildId);await this.create(false);
+    backup.state.maintenance=true;backup.state.testers={};delete backup.state.runtimeLease;for(const j of Object.values(backup.state.jobs))if(j.status==='working'){j.status='pending';delete j.leaseUntil;}
+    await this.store.change(s=>{if(!s.maintenance)throw new Error('Maintenance must remain enabled.');const lease=s.runtimeLease;for(const key of Object.keys(s))delete (s as unknown as Record<string,unknown>)[key];Object.assign(s,structuredClone(backup.state));if(lease)s.runtimeLease=lease;});
+  });}
 }

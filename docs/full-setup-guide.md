@@ -1,13 +1,13 @@
 # Crystal Tier List Bot
 ## Full installation and operations guide
 
-Version 0.1.0 | Prepared October 11, 2026
+Version 0.1.1 | Updated October 13, 2026
 
 This package contains a configurable Discord bot for Crystal PvP account linking, regional testing, tier lists, support tickets, deadlines, restrictions, and backups. Each installation serves one Discord community using one bot application and one running process.
 
 The full-package ZIP includes compiled JavaScript, TypeScript source, automated tests, pinned dependencies, configuration templates, SQL setup, launchers, and this guide. Node.js and downloaded dependencies are not bundled. Internet access is needed for installation and normal operation.
 
-Release status: 27 local automated tests passed. A clean Windows installation passed configuration validation. Discord behavior is tested with simulated transports; PostgreSQL uses an emulator and Supabase uses a mocked API in these checks. Live Discord, real remote databases, and clean Linux/macOS installation still need rehearsal. Use an isolated Discord server first.
+Release status: 45 local automated tests passed. A clean Windows installation passed configuration validation. Discord behavior is tested with simulated transports; PostgreSQL uses an emulator and Supabase uses a mocked API in these checks. Windows/Linux automated checks are configured in GitHub Actions; review their actual results separately. Live Discord, real remote databases, and the target hosting environment still need rehearsal. Use an isolated Discord server first.
 
 Read the quick start for the shortest installation route. The later sections explain configuration, permissions, hosting, recovery, migration, and troubleshooting. Commands shown in this guide must be entered in the specified place: host terminal commands on the machine running the bot, and slash commands inside your Discord server.
 
@@ -51,7 +51,7 @@ cp .env.example .env
 
 6. Create and invite a Discord bot as described in section 2. Put its token after DISCORD_TOKEN= in .env. Move its server role above all roles it will assign.
 
-7. Start it with npm start. In Discord, run /setup preview, then /setup apply and confirm. Review /config validate, fix any errors, and use /panels refresh. Initial setup publishes panels automatically when all checks pass.
+7. Start it with npm start. In Discord, run /setup wizard to choose settings and resource mappings, review the full draft attachment, and confirm. /setup preview and /setup apply remain available. Review /config validate, fix any errors, and use /panels refresh. Initial setup publishes panels automatically when all checks pass.
 
 Before automatic setup, npm run validate can report missing role/channel IDs. That is expected for a template with null resources. Cooldowns and your server ID must still be explicitly chosen. The bot can connect for setup before the configuration is ready for user requests.
 
@@ -158,8 +158,8 @@ The bot creates new private channels according to ticket type. When a category f
 
 From the installation folder run npm start. You should see a successful connection message. Commands are registered for the configured server, not globally. Use the application command picker inside that server.
 
-1. As a Discord Administrator in an uninitialized server, run /setup preview. Read the resources it intends to create. Supplied IDs will be reused.
-2. Run /setup apply and confirm as the same operator. Confirmation is tied to the operator and expires after five minutes. Preview again if the configuration changed or the confirmation expired.
+1. As a Discord Administrator in an uninitialized server, run /setup wizard. Set community name/timezone, regions/features, cooldowns/quota/capacity, and resource mappings. Alternatively, retain the host-file route with /setup preview and /setup apply.
+2. Review the attached full setup-draft.json and the summary, then confirm as the same operator. Confirmation is tied to the operator and expires after five minutes. Preview again if the configuration changed or the confirmation expired.
 3. On first successful setup, the confirming operator receives the configured Owner role. Each created resource is saved immediately, so a failed setup can continue without recreating everything.
 4. Run /config validate. Resolve missing settings, role hierarchy, channel types, and read/send/archive permissions. If setup reports unresolved settings, edit config.json and repeat setup or reload after fixing them.
 5. Assign staff groups and /addtester as needed. Confirm private access with ordinary members.
@@ -174,9 +174,26 @@ Database backend or community server changes require stopping the bot and planni
 Always run from the installation folder. Relative paths for .env, config.json, archives, and backups are resolved from the process working directory. If a host panel lets you choose a working directory, point it to the folder containing package.json.
 
 ---PAGE---
+# 6A. Using the private Discord setup wizard
+
+The wizard prepares a draft; opening it and editing forms does not save configuration. Before the bot is initialized, the operator needs Discord Administrator permission. After initialization, the configured Owner group is required. The draft is private, belongs to that operator, and expires 15 minutes after opening. Restarting the bot discards unsaved drafts.
+
+Community: choose the visible community name and an IANA timezone. Features / Regions: use the select menus to enable NA/EU/AS and testing, support, lists, quotas, or migration. Lists/quotas require testing. Cooldowns / Quota: enter explicit durations, a monthly count (0 disables quotas), and queue capacity from 1 to 1000.
+
+Resources: use the paginated menu to choose a role group, tier role, region role/waitlist role, channel, category, tier-list channel, or support category/archive mapping. Paste existing quoted-string ID values as digits into the form. Array mappings accept comma-separated IDs. Leave a mapping blank if setup should create missing resources; leave overflow blank for automatic overflow creation when needed.
+
+Review: check the complete private JSON attachment and planned resource creation. Errors in settings or supplied resource types/permissions must be corrected. Confirm before any settings are saved or Discord resources created. If you edit the draft after reviewing, review it again. Host-file edits invalidate the draft instead of being silently overwritten.
+
+On an initialized installation, enable maintenance before applying wizard changes. Active work is drained under the same exclusive pause used for recovery. If provisioning partly fails, successful creations remain recorded in config.json for a later retry. Fix role hierarchy/permissions and run setup again. Maintenance is not automatically disabled.
+
+The initial server ID, database selection/credentials, and bot token stay on the host. The wizard never asks for tokens. Custom support access/ping/closing policies, templates, colors, and storage directories remain configurable in the JSON file. The wizard covers settings and existing resource mappings without replacing those advanced options.
+
+Cancel exits a draft without saving. Cancelling a review confirmation does not apply changes; you can still work on the unexpired draft. Commands can be visible to unauthorized people, but the bot checks authorization again for every wizard interaction and confirmation.
+
+---PAGE---
 # 7. Player verification and testing workflow
 
-Verify Account requests the Minecraft in-game name, one enabled region, and preferred server. The Minecraft lookup validates an existing username and UUID; it does not prove account ownership. One Minecraft UUID can be linked to one Discord player at a time. Verification assigns the ordinary region role.
+Verify Account requests the Minecraft in-game name, one enabled region, and preferred server. The Minecraft lookup validates an existing username and UUID; it does not prove account ownership. One Minecraft UUID can be linked to one Discord player at a time. Verification assigns the ordinary region role. Already-linked users immediately see a private Already Verified embed with their saved IGN, UUID, and thumbnail, without reopening the form.
 
 Enter Waitlist gives the separate region waitlist role and access to that region's queue. Verification alone does not grant this waitlist role. Members cannot change region themselves by verifying again. Bot Admins use /unverify when an incorrect/lost Minecraft account needs to be unlinked; this preserves Discord rank and cooldown, clears the association/region/waitlist, and allows re-verification. Open tests must be finished first.
 
@@ -190,7 +207,7 @@ Existing high-tier players bypass the normal queue: HT3 requests LT2; LT2 reques
 
 /close records the chosen tier, updates roles and eligible lists, credits the original tester once, applies cooldown, posts the result with six reactions, and queues archival. /format posts an editable Markdown fight template; it does not decide the result.
 
-HT3 list membership is manual. LT2 and higher membership is maintained automatically for eligible linked players. List embeds are grouped by region. Restrictions remove list memberships and block testing; expiry alone does not restore those memberships.
+HT3 list membership is manual. LT2 and higher membership is maintained automatically for eligible linked players. List embeds are grouped by region. Large lists/queues paginate at line boundaries to keep mentions intact; obsolete bot-managed pages are removed when they shrink. Unrelated channel messages are preserved. Restrictions remove list memberships and block testing; expiry alone does not restore those memberships.
 
 ---PAGE---
 # 8. Command reference: players and ticket staff
@@ -231,6 +248,7 @@ List commands
 
 Bot Admin
 
+- /health: private connectivity, uptime, maintenance, recovery fence, job counts, oldest pending work, last successful automatic backup, and configuration problem counts. Backend errors and credentials are omitted. Discord validation counts reflect the last validation; use /config validate for a fresh check. Legacy jobs use scheduled time when no creation timestamp exists.
 - /unverify member: unlink the Minecraft account while preserving Discord rank/history and cooldown.
 - /addtester member and /stoptester member: assign/remove tester authorization and manage active sessions.
 - /resetcooldown member and /setcooldown member days: clear/set an individual cooldown.
@@ -253,7 +271,7 @@ Restriction Key
 
 Owner
 
-/setup preview|apply and /config validate|reload manage setup/configuration. /maintenance enabled controls maintenance. /backup export|restore|transfer handles saved state. /migration apply|retry applies/resumes imports and retries saved failed work. /reset member clears that player's account/rank/queue/cooldown while preserving restrictions and archives. /forceresetcooldowns clears all cooldowns. /forceclosetickets discontinues and archives active open tickets. Bulk/reset/restore/apply operations use review confirmations; inspect them before approving.
+/setup wizard, /setup preview|apply and /config validate|reload manage setup/configuration. /maintenance enabled controls maintenance. /backup export|restore|transfer handles saved state. /migration apply|retry applies/resumes imports and retries saved failed work. /reset member clears that player's account/rank/queue/cooldown while preserving restrictions and archives. /forceresetcooldowns clears all cooldowns. /forceclosetickets discontinues and archives active open tickets. Bulk/reset/restore/apply operations use review confirmations; inspect them before approving.
 
 ---PAGE---
 # 10. Support tickets, evidence, and deadlines
@@ -266,7 +284,7 @@ Closing locks the ticket and queues asynchronous work. The durable queue saves a
 
 copyImages defaults to true for reports and appeals. It copies supported images from Discord attachment hosts, with a 25 MiB per-image limit. Videos are not copied. Attachment links and YouTube URLs remain in the transcript. A link may later expire or become unavailable, so this is not a permanent video evidence store.
 
-Images are saved privately in the archive directory and removed after the configured imageRetentionDays (default 10). Transcripts do not automatically expire. The current archive attachment limit is 8 MiB per Markdown transcript; larger required transcripts retain the channel for staff intervention. Monitor available disk space.
+Images are saved privately in the archive directory and removed after the configured imageRetentionDays (default 10). Cleanup covers the current root and historic directories recorded on saved tickets. It deletes only expired managed images, preserving transcripts and unrelated files. Transcripts do not automatically expire. The current archive attachment limit is 8 MiB per Markdown transcript; larger required transcripts retain the channel for staff intervention. Monitor available disk space.
 
 Use /deadline set duration:3h as a Regulator who can access the ticket. It sets/replaces the deadline and notifies participants. /deadline clear cancels it. At expiry, the person who set it receives the review notification. It does not delete the ticket, override evidence requirements, or choose a result.
 
@@ -323,7 +341,9 @@ Before an update, create a manual export, preserve config.json and .env, and mak
 
 Restore rehearsal: enable /maintenance enabled:true, place a valid backup in the configured backup directory, then use /backup restore filename:YOUR_BACKUP.json. Read the preview and confirm. The current state is backed up first; maintenance remains enabled after restore. Verify saved ranks, tickets, restrictions, and associations before resuming.
 
-Discord channels and messages are external resources. Restoring an old database does not recreate already-deleted Discord channels or undo posted messages. Do not restore an old snapshot to a live community without checking those differences. Live restore races and external side effects still need rehearsal in this candidate release.
+Restore/transfer first wait for active jobs and actions to finish, fencing new state-changing work while process lease renewal continues. If the waiting phase exceeds 30 seconds, recovery does not start; maintenance remains enabled. Resolve long-running work and review a new confirmation to retry. Invalid restores leave source state unchanged. Transfer keeps source state and maintenance intact if the destination fails.
+
+Discord channels and messages are external resources. Restoring an old database does not recreate already-deleted Discord channels or undo posted messages. Do not restore an old snapshot to a live community without checking those differences. Local regression tests cover recovery races, but live external side effects still need rehearsal in this candidate release.
 
 Backend transfer: prepare a destination configuration file on the same host pointing to an empty destination database. Use /backup transfer config:DESTINATION_CONFIG.json as Owner in maintenance. The transfer verifies destination state and leaves source maintenance enabled. Stop the source process before changing the active config and starting the destination. Never run both.
 
@@ -442,4 +462,4 @@ Supabase RPC and row-level security:
 https://supabase.com/docs/reference/javascript/rpc
 https://supabase.com/docs/guides/database/postgres/row-level-security
 
-For exact local behavior, consult src/config.ts, src/domain/service.ts, src/discord/runtime.ts, and docs/STATUS.md. This guide documents the 0.1.0 candidate; repeat validation after changing code, dependencies, roles, or databases.
+For exact local behavior, consult src/config.ts, src/domain/service.ts, src/discord/runtime.ts, and docs/STATUS.md. This guide documents the 0.1.1 candidate; repeat validation after changing code, dependencies, roles, or databases. Full command permissions are in docs/COMMANDS.txt; dedicated live checks are in docs/LIVE-REHEARSAL.md and docs/DATABASE-REHEARSAL.md. Measured local volume checks are in docs/LOAD-CHECKS.md.

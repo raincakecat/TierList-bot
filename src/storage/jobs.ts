@@ -7,6 +7,9 @@ export class Worker {
   private token=randomUUID();
   constructor(private store:Store,private execute:(job:Job,checkpoint:(key:string,value:unknown)=>Promise<void>)=>Promise<void>,private report:(job:Job)=>Promise<void>){}
   async runOnce():Promise<boolean>{
+    return this.store.operations.shared(()=>this.executeOnce());
+  }
+  private async executeOnce():Promise<boolean>{
     if(this.active)return false;this.active=true;
     try{
       const job=await this.store.change(s=>{const now=Date.now();const j=Object.values(s.jobs).find(j=>j.status!=='done'&&j.nextAt<=now&&(j.status!=='working'||(j.leaseUntil??0)<now));if(!j)return null;j.status='working';j.leaseUntil=now+300_000;j.checkpoints.worker=this.token;return structuredClone(j);});

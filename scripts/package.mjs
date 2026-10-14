@@ -9,4 +9,5 @@ for(const name of ['package.json','package-lock.json','README.md','config.exampl
 entries['start.bat']=strToU8('@echo off\r\ncd /d "%~dp0"\r\nnpm start\r\n');
 entries['start.sh']=strToU8('#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec npm start\n');
 const forbidden=Object.keys(entries).filter(p=>p==='config.json'||p==='.env'||p.includes('local-policy')||p.startsWith('data/')||p.startsWith('node_modules/'));if(forbidden.length)throw new Error('Unexpected local files in package');
-await mkdir('release',{recursive:true});await writeFile('release/crystal-bot-0.1.0.zip',zipSync(entries,{level:6}));console.log(`Packaged ${Object.keys(entries).length} files in release/crystal-bot-0.1.0.zip`);
+const version=JSON.parse(await readFile('package.json','utf8')).version;
+await mkdir('release',{recursive:true});await writeFile(`release/crystal-bot-${version}.zip`,zipSync(entries,{level:6}));console.log(`Packaged ${Object.keys(entries).length} files in release/crystal-bot-${version}.zip`);

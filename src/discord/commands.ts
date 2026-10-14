@@ -5,6 +5,7 @@ const rank=(o:SlashCommandStringOption)=>o.setName('tier').setDescription('Tier'
 const cmd=(name:string,description:string)=>new SlashCommandBuilder().setName(name).setDescription(description).setContexts(0);
 export function commandDefinitions(){
   const commands=[
+    cmd('health','View private database, job and backup health'),
     cmd('profile','View a player profile').addUserOption(o=>o.setName('member').setDescription('Player')),
     cmd('leave','Leave your active queue'),
     cmd('start','Start a testing session').addStringOption(regions),cmd('stop','End your testing session'),cmd('next','Open the next queued test'),
@@ -33,7 +34,7 @@ export function commandDefinitions(){
     cmd('configcooldown','Set cooldowns for future completed tests').addStringOption(o=>o.setName('kind').setDescription('Test class').setRequired(true).addChoices({name:'Normal',value:'normal'},{name:'High',value:'high'})).addStringOption(o=>o.setName('duration').setDescription('0 for none, or a duration such as 7d').setRequired(true)),
     cmd('stats','View completed tests for a tester').addUserOption(o=>o.setName('member').setDescription('Tester')),
     cmd('testerstats','View tester quota statistics'),cmd('testerlb','View the testing leaderboard').addStringOption(o=>o.setName('period').setDescription('Period').addChoices({name:'Monthly',value:'monthly'},{name:'Weekly',value:'weekly'},{name:'All time',value:'all'})),
-    cmd('setup','Preview or apply initial resource setup').addSubcommand(s=>s.setName('preview').setDescription('Preview setup changes')).addSubcommand(s=>s.setName('apply').setDescription('Review and confirm setup')),
+    cmd('setup','Preview or apply initial resource setup').addSubcommand(s=>s.setName('wizard').setDescription('Open the private guided setup wizard')).addSubcommand(s=>s.setName('preview').setDescription('Preview setup changes')).addSubcommand(s=>s.setName('apply').setDescription('Review and confirm setup')),
     cmd('config','Validate or reload configuration').addSubcommand(s=>s.setName('validate').setDescription('Validate configuration and Discord resources')).addSubcommand(s=>s.setName('reload').setDescription('Validate and reload the local file')),
     cmd('panels','Manage request panels').addSubcommand(s=>s.setName('refresh').setDescription('Publish or refresh configured panels')),
     cmd('backup','Export, restore, or transfer portable data').addSubcommand(s=>s.setName('export').setDescription('Create an export on the bot host')).addSubcommand(s=>s.setName('restore').setDescription('Preview a local backup restore').addStringOption(o=>o.setName('filename').setDescription('File in the backup directory').setRequired(true))).addSubcommand(s=>s.setName('transfer').setDescription('Transfer to an empty configured destination').addStringOption(o=>o.setName('config').setDescription('Destination config filename on the host').setRequired(true))),

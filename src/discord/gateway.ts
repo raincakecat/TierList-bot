@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { paginateLines } from './pages.js';
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, PermissionFlagsBits, StringSelectMenuBuilder, type Client, type Guild, type TextChannel, type MessageCreateOptions } from 'discord.js';
 import { render, type Config } from '../config.js';
 import { enqueue, listTiers, removeQueue, tierName } from '../domain/service.js';
@@ -115,11 +116,23 @@ export class Gateway {
     if(c.modules.supportTickets){const kinds=c.supportTicketTypes.filter(t=>t.enabled);for(let page=0;page<Math.ceil(kinds.length/25);page++)await this.upsertPanel(`support:${page}`,await this.text(c.channels.supportPanel!),{embeds:[new EmbedBuilder().setTitle('Contact Support').setDescription(render(c.templates.supportPanel,{communityName:c.community.name})).setColor(c.branding.colors.panel as `#${string}`)],components:[new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId('support').setPlaceholder('Choose a ticket type').addOptions(kinds.slice(page*25,page*25+25).map(t=>({label:t.name,value:t.key}))))]});}
     await this.queues();await this.lists();
   }
+  private async removePanelPages(prefix:string,keep:Set<string>,channelId:string){
+    const state=await this.store.read();for(const [key,id]of Object.entries(state.panels)){if(!(key===prefix||key.startsWith(prefix+':'))||keep.has(key))continue;
+      const channel=await this.text(channelId);let message;try{message=await channel.messages.fetch(id);}catch(error){if((error as {code?:number}).code!==10008)throw error;}
+      if(message?.author.id===this.client.user!.id)await message.delete();
+      await this.store.change(s=>{if(s.panels[key]===id)delete s.panels[key];});
+    }
+  }
   async queues(){const c=this.config;if(!c.modules.testing)return;const s=await this.store.read();for(const r of REGIONS)if(c.regions[r].enabled){const testers=Object.keys(s.testers).filter(id=>s.testers[id]===r),queue=s.queues[r];
-    const description=testers.length?`The queue updates every minute. Use /leave to leave.\n\n**Queue:**\n${queue.length?queue.map((id,i)=>`${i+1}. <@${id}>`).join('\n'):'Empty'}\n\n**Active Testers:**\n${testers.map(id=>`<@${id}>`).join('\n')}`:'No testers for your region are available at this time. Check back later!';
-    await this.upsertPanel(`queue:${r}`,await this.text(c.regions[r].queueChannelId!),{embeds:[new EmbedBuilder().setTitle(testers.length?'Tester(s) Available!':'No Testers Online').setDescription(description).setColor(c.branding.colors.panel as `#${string}`)],components:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`join:${r}`).setLabel('Join Queue').setStyle(ButtonStyle.Primary).setDisabled(!testers.length||s.maintenance),new ButtonBuilder().setCustomId('leave').setLabel('Leave Queue').setStyle(ButtonStyle.Secondary))]});}}
-  async lists(){const c=this.config;if(!c.modules.tierLists)return;const s=await this.store.read(),guild=await this.guild();for(const tier of listTiers){const channelId=c.tierLists.channelIds[tier as keyof Config['tierLists']['channelIds']];if(!channelId)continue;const lines:string[]=[];for(const r of REGIONS)if(c.regions[r].enabled){const ids=s.lists[tier]?.[r]??[],names=await Promise.all(ids.map(async id=>({id,name:(await guild.members.fetch(id).catch(()=>null))?.displayName??id})));names.sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id));lines.push(`**${r}**\n${names.length?names.map(x=>`<@${x.id}>`).join('\n'):'No members listed'}`);}
-    const text=lines.join('\n\n'),chunks=text.match(/[\s\S]{1,3800}/g)??['No members listed'];for(let page=0;page<chunks.length;page++)await this.upsertPanel(`list:${tier}:${page}`,await this.text(channelId),{embeds:[new EmbedBuilder().setTitle(`${tierName(tier)} List${page?` (${page+1})`:''}`).setDescription(chunks[page]!).setColor(c.branding.colors.panel as `#${string}`).setTimestamp()]});}}
+    const lines=testers.length?['The queue updates every minute. Use /leave to leave.','','**Queue:**',...(queue.length?queue.map((id,i)=>`${i+1}. <@${id}>`):['Empty']),'','**Active Testers:**',...testers.map(id=>`<@${id}>`)]:['No testers for your region are available at this time. Check back later!'];
+    const pages=paginateLines(lines),keep=new Set<string>();for(let page=0;page<pages.length;page++){const key=page?`queue:${r}:${page}`:`queue:${r}`;keep.add(key);
+      const components=page?[]:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`join:${r}`).setLabel('Join Queue').setStyle(ButtonStyle.Primary).setDisabled(!testers.length||s.maintenance),new ButtonBuilder().setCustomId('leave').setLabel('Leave Queue').setStyle(ButtonStyle.Secondary))];
+      await this.upsertPanel(key,await this.text(c.regions[r].queueChannelId!),{embeds:[new EmbedBuilder().setTitle((testers.length?'Tester(s) Available!':'No Testers Online')+(pages.length>1?` (${page+1}/${pages.length})`:'' )).setDescription(pages[page]!).setColor(c.branding.colors.panel as `#${string}`)],components});
+    }await this.removePanelPages(`queue:${r}`,keep,c.regions[r].queueChannelId!);
+  }}
+  async lists(){const c=this.config;if(!c.modules.tierLists)return;const s=await this.store.read(),guild=await this.guild();for(const tier of listTiers){const channelId=c.tierLists.channelIds[tier as keyof Config['tierLists']['channelIds']];if(!channelId)continue;const lines:string[]=[];for(const r of REGIONS)if(c.regions[r].enabled){const ids=s.lists[tier]?.[r]??[],names=await Promise.all(ids.map(async id=>({id,name:(await guild.members.fetch(id).catch(()=>null))?.displayName??id})));names.sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id));lines.push(`**${r}**`,...(names.length?names.map(x=>`<@${x.id}>`):['No members listed']),'');}
+    const chunks=paginateLines(lines),keep=new Set<string>();for(let page=0;page<chunks.length;page++){const key=`list:${tier}:${page}`;keep.add(key);await this.upsertPanel(key,await this.text(channelId),{embeds:[new EmbedBuilder().setTitle(`${tierName(tier)} List${page?` (${page+1})`:''}`).setDescription(chunks[page]!).setColor(c.branding.colors.panel as `#${string}`).setTimestamp()]});}await this.removePanelPages(`list:${tier}`,keep,channelId);
+  }}
   private async archive(t:Ticket,j:Job,save:(k:string,v:unknown)=>Promise<void>){
     if(t.status==='closed')return;if(!t.channelId)throw new Error('Ticket has no channel');const guild=await this.guild();
     const channel=await guild.channels.fetch(t.channelId).catch(()=>null);
@@ -143,5 +156,10 @@ export class Gateway {
     if((await this.store.read()).maintenance)throw new Error('Deletion paused during maintenance');
     await channel.delete('Archived ticket');await this.store.change(s=>s.tickets[t.id]!.status='closed');
   }
-  async cleanupImages(){const root=this.config.archival.directory;await mkdir(root,{recursive:true,mode:0o700});for(const entry of await readdir(root,{withFileTypes:true})){if(!entry.isDirectory()||!/^[a-f0-9-]{36}$/.test(entry.name))continue;const dir=join(root,entry.name);const marker=await readFile(join(dir,'retention.json'),'utf8').catch(()=>null);if(!marker)continue;const retention=JSON.parse(marker) as {archivedAt:number;imageRetentionDays:number};if(Date.now()-retention.archivedAt<retention.imageRetentionDays*86400000)continue;for(const file of await readdir(dir))if(/^image-\d+\.bin$/.test(file))await rm(join(dir,file));}}
+  async cleanupImages(){const state=await this.store.read(),roots=new Set([this.config.archival.directory,...Object.values(state.tickets).map(t=>t.archiveDirectory).filter((x):x is string=>!!x)].map(p=>resolve(p)));for(const root of roots){
+    await mkdir(root,{recursive:true,mode:0o700});for(const entry of await readdir(root,{withFileTypes:true})){if(!entry.isDirectory()||!/^[a-f0-9-]{36}$/.test(entry.name))continue;const dir=join(root,entry.name);const marker=await readFile(join(dir,'retention.json'),'utf8').catch(()=>null);if(!marker)continue;
+      let retention:{archivedAt:number;imageRetentionDays:number};try{retention=JSON.parse(marker);}catch{continue;}if(!Number.isFinite(retention.archivedAt)||!Number.isFinite(retention.imageRetentionDays)||retention.imageRetentionDays<=0||Date.now()-retention.archivedAt<retention.imageRetentionDays*86400000)continue;
+      for(const file of await readdir(dir))if(/^image-\d+\.bin$/.test(file))await rm(join(dir,file));
+    }
+  }}
 }

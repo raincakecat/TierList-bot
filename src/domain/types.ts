@@ -28,7 +28,7 @@ export interface Restriction { id: string; playerId: string; uuid: string; reaso
 export interface Job {
   id: string; kind: 'open'|'roles'|'archive'|'result'|'notice'|'lists'|'queues'|'deadline';
   data: Record<string, unknown>; status: 'pending'|'working'|'done'; attempts: number;
-  nextAt: number; leaseUntil?: number; checkpoints: Record<string, unknown>;
+  nextAt: number; createdAt?:number; leaseUntil?: number; checkpoints: Record<string, unknown>;
 }
 export interface State {
   version: 1; guildId: string; initialized: boolean; maintenance: boolean;

@@ -168,7 +168,7 @@
     }
   },
   "templates": {
-    "verificationPanel": "Verify your Minecraft account, then enter the waitlist for your region.",
+    "verificationPanel": "Link an existing Minecraft account, then enter the waitlist for your region. Username lookup checks account existence; it does not prove ownership.",
     "supportPanel": "Choose a ticket type to contact the appropriate team.",
     "testOpeningTitle": "{minecraftIgn}'s Information",
     "resultTitle": "{discordUsername}'s Test Results 🏆",
