@@ -5,6 +5,7 @@ const rank=(o:SlashCommandStringOption)=>o.setName('tier').setDescription('Tier'
 const cmd=(name:string,description:string)=>new SlashCommandBuilder().setName(name).setDescription(description).setContexts(0);
 export function commandDefinitions(){
   const commands=[
+    cmd('loa','Leave of absence status and administration').addSubcommand(s=>s.setName('status').setDescription('View a saved LOA').addUserOption(o=>o.setName('member').setDescription('Staff member'))).addSubcommand(s=>s.setName('end').setDescription('End an active LOA as an LOA Admin').addUserOption(o=>o.setName('member').setDescription('Staff member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Required reason').setRequired(true).setMaxLength(1000))),
     cmd('health','View private database, job and backup health'),
     cmd('profile','View a player profile').addUserOption(o=>o.setName('member').setDescription('Player')),
     cmd('leave','Leave your active queue'),

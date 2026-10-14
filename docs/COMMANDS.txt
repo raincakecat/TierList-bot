@@ -1,4 +1,4 @@
-CRYSTAL BOT COMMANDS - 0.1.1
+CRYSTAL BOT COMMANDS - 0.2.0
 
 Owner inherits the bot's configured permission groups. Ticket tools still require access to the ticket. Support closure uses the responsible type's closing groups and its Close button.
 
@@ -13,6 +13,7 @@ VERIFIED TESTER (also needs Staff for testing work)
 /next - Open next eligible FIFO test.
 
 STAFF
+/loa status [member] - Private current/latest leave status; your own pending/active record includes withdraw/end controls.
 /passeval - Pass evaluation; continue HT3 test.
 /skip - Skip before evaluation passes.
 /close tier - Finish test or discontinue.
@@ -48,6 +49,15 @@ REGULATOR
 RESTRICTION KEY
 /restrict member ign reason [duration] - Restrict account pair, remove list/queue membership.
 /unrestrict member - Remove pair restriction.
+
+LOA ADMIN (Owner inherits)
+Accept/Deny buttons in LOA In Progress - Decide a pending request; denial requires a reason.
+/loa end member reason - End an approved leave early, with a reason.
+
+LOA REQUESTERS
+Request Leave of Absence button - Staff-only form for username, 1d-30d duration, and reason.
+Withdraw Request / End My LOA - Requester-only pending cancellation or early return.
+One pending/active request per member. Approval starts leave; expiry removes its role. Any approved monthly overlap exempts quota without preventing testing or changing counts.
 
 LIST ADMIN
 /ht3list add|remove member region and equivalent lt2/ht2/lt1/ht1 commands - Manage regional membership.

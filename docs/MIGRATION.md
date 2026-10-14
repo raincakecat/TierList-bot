@@ -34,3 +34,5 @@ If the original opening rank is unknown, supply null for `openingTier` so it is 
 Place imports in `data/imports`, not in a publicly accessible directory. Apply requires Owner, migration enabled, maintenance, a matching server, valid channels, backup, and explicit confirmation. A completed import cannot be repeated.
 
 Use the Discord setup wizard or a reviewed host configuration change to enable migration and map Bot Review. Initial server/database credentials remain on the host. `/health` reports saved retrying work. Backup restore and backend transfer now drain active work through an exclusive fence; they do not reverse external Discord changes. Rehearse migration and recovery with disposable data using LIVE-REHEARSAL.md and DATABASE-REHEARSAL.md.
+
+Existing configuration/portable exports without LOA fields remain supported. New portable backups include saved LOA history and jobs; the standardized legacy importer does not import another bot's LOA records. Configure LOA separately after takeover rather than inventing old leave history.

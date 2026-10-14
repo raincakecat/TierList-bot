@@ -77,7 +77,7 @@ def frame(canvas, doc):
     canvas.line(48, 43, w-48, 43)
     canvas.setFillColor(colors.HexColor('#62758B'))
     canvas.setFont(regular, 8)
-    canvas.drawString(48, 29, 'CRYSTAL BOT  /  SETUP & OPERATIONS  /  v0.1.1')
+    canvas.drawString(48, 29, 'CRYSTAL BOT  /  SETUP & OPERATIONS  /  v0.2.0')
     canvas.drawRightString(w-48, 29, str(doc.page))
     canvas.restoreState()
 

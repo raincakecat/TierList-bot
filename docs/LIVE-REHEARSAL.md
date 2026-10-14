@@ -31,6 +31,15 @@ Automated tests simulate Discord. Use an isolated server, separate bot applicati
 - Restore/transfer during a deliberately slow job: active work finishes first, new state changes wait, lease renewal continues, and timeout does not start recovery. Maintenance remains enabled; a new confirmation can retry.
 - Check external Discord differences before restoring old backups. Database restore cannot undo deleted channels or previously posted messages.
 
+## Leave of absence
+
+- Enable LOA through the wizard and create/reuse its two roles and three channels. Confirm portal/roster branding, private review access, and Staff-only accepted/request channels.
+- Submit valid 1d-30d leave and reject nonstaff, duplicates, invalid durations, and blank reasons. Ensure the administrator role is pinged exactly for the request.
+- Two admins attempt different decisions; only one succeeds. Denial requires a reason and sends a DM. Approval starts at decision time, grants the role and posts one accepted message.
+- Withdraw before approval; end early as requester or LOA Admin. Other members cannot use those controls. Roster and review/accepted posts reflect decisions.
+- Test blocked DMs, retry/restart during role assignment or message sending, expiry during maintenance/disabled creation, and rejoining with active versus expired leave.
+- Check month-boundary exemption and historical early return. Test counts remain unchanged and the tester can still use /start.
+
 ## Record the result
 
 Record host/Node versions, selected database, configuration revision, scenario, expected/actual result, and evidence. Use private issue attachments for account data. Record any failures before planning community cutover. Remote database checks are separate; see DATABASE-REHEARSAL.md.

@@ -1,13 +1,13 @@
 # Crystal Tier List Bot
 ## Full installation and operations guide
 
-Version 0.1.1 | Updated October 13, 2026
+Version 0.2.0 | Updated October 14, 2026
 
 This package contains a configurable Discord bot for Crystal PvP account linking, regional testing, tier lists, support tickets, deadlines, restrictions, and backups. Each installation serves one Discord community using one bot application and one running process.
 
 The full-package ZIP includes compiled JavaScript, TypeScript source, automated tests, pinned dependencies, configuration templates, SQL setup, launchers, and this guide. Node.js and downloaded dependencies are not bundled. Internet access is needed for installation and normal operation.
 
-Release status: 45 local automated tests passed. A clean Windows installation passed configuration validation. Discord behavior is tested with simulated transports; PostgreSQL uses an emulator and Supabase uses a mocked API in these checks. Windows/Linux automated checks are configured in GitHub Actions; review their actual results separately. Live Discord, real remote databases, and the target hosting environment still need rehearsal. Use an isolated Discord server first.
+Release status: 61 local automated tests passed. A clean Windows installation passed configuration validation. Discord behavior is tested with simulated transports; PostgreSQL uses an emulator and Supabase uses a mocked API in these checks. Windows/Linux automated checks are configured in GitHub Actions; review their actual results separately. Live Discord, real remote databases, and the target hosting environment still need rehearsal. Use an isolated Discord server first.
 
 Read the quick start for the shortest installation route. The later sections explain configuration, permissions, hosting, recovery, migration, and troubleshooting. Commands shown in this guide must be entered in the specified place: host terminal commands on the machine running the bot, and slash commands inside your Discord server.
 
@@ -85,7 +85,7 @@ config.example.json is a template. config.json is your installation's live setti
 
 community: set guildId, a community name, and an IANA timezone such as America/New_York or Europe/London. Statistics and monthly reports use this timezone.
 
-modules: testing, supportTickets, and tierLists can be enabled separately, but tierLists and testerQuotas require testing. The tierLists switch covers all five HT3, LT2, HT2, LT1, and HT1 lists. Migration is optional. Disabling requests does not erase existing tickets or history.
+modules: testing, supportTickets, and tierLists can be enabled separately, but tierLists and testerQuotas require testing. The tierLists switch covers all five HT3, LT2, HT2, LT1, and HT1 lists. Migration and staff LOA are optional; LOA defaults to disabled. Disabling requests does not erase existing tickets or history.
 
 regions: NA, EU, and AS each have enabled, regionRoleId, waitlistRoleId, queueChannelId, and testCategoryId. Enable at least one region for testing. A region role records the selected region; a separate waitlist role grants regional queue access.
 
@@ -144,6 +144,7 @@ Permission groups are arrays of Discord role IDs, not member IDs. A group may in
 - highStaff: access/pings/closing for sensitive support types in the default configuration.
 - trainee: the default general-support opening ping group. Map access separately if those members should read that ticket type.
 - partnershipManager: the default partnership ticket access/ping/closing group.
+- loaAdmin: decide LOA requests and end approved leave early. Staff eligibility is still required to submit your own request.
 
 Type-specific support permissions matter: Staff does not automatically gain access to sensitive highStaff tickets. Add the appropriate groups to that type's accessGroups and closingGroups if your policy differs. A ticket tool also requires the invoking member to see the ticket.
 
@@ -178,7 +179,7 @@ Always run from the installation folder. Relative paths for .env, config.json, a
 
 The wizard prepares a draft; opening it and editing forms does not save configuration. Before the bot is initialized, the operator needs Discord Administrator permission. After initialization, the configured Owner group is required. The draft is private, belongs to that operator, and expires 15 minutes after opening. Restarting the bot discards unsaved drafts.
 
-Community: choose the visible community name and an IANA timezone. Features / Regions: use the select menus to enable NA/EU/AS and testing, support, lists, quotas, or migration. Lists/quotas require testing. Cooldowns / Quota: enter explicit durations, a monthly count (0 disables quotas), and queue capacity from 1 to 1000.
+Community: choose the visible community name and an IANA timezone. Features / Regions: use the select menus to enable NA/EU/AS and testing, support, lists, quotas, migration, or LOA. Lists/quotas require testing. Cooldowns / Quota: enter explicit durations, a monthly count (0 disables quotas), and queue capacity from 1 to 1000.
 
 Resources: use the paginated menu to choose a role group, tier role, region role/waitlist role, channel, category, tier-list channel, or support category/archive mapping. Paste existing quoted-string ID values as digits into the form. Array mappings accept comma-separated IDs. Leave a mapping blank if setup should create missing resources; leave overflow blank for automatic overflow creation when needed.
 
@@ -289,6 +290,27 @@ Images are saved privately in the archive directory and removed after the config
 Use /deadline set duration:3h as a Regulator who can access the ticket. It sets/replaces the deadline and notifies participants. /deadline clear cancels it. At expiry, the person who set it receives the review notification. It does not delete the ticket, override evidence requirements, or choose a result.
 
 Ordinary members should not see staff reports, restriction appeals, archive channels, Bot Review, operational logs, or staff action logs unless your deliberate policy grants access. Review this with an ordinary account; Discord administrators can bypass normal channel privacy, so an administrator account is not a useful privacy test.
+
+---PAGE---
+# 10A. Staff Leave of Absence
+
+Enable modules.loa through the Discord setup wizard. Configure loa.roleId, permissionGroups.loaAdmin, and the requestLoa, loaInProgress, and acceptedLoa channel IDs. Setup can create the LOA and LOA Admin roles and all three channels. Use three separate channels and keep the LOA role separate from tier, region, waitlist, and permission roles.
+
+Request LOA and Accepted LOA are readable by Staff, LOA Admins, and Owners. LOA In Progress is private to LOA Admins and Owners. Existing public LOA channels fail validation; ordinary Staff access to the review channel is also flagged unless that role is explicitly authorized as LOA Admin/Owner. Discord Administrators can bypass normal privacy.
+
+The Request LOA channel displays a themed staff leave portal and a live Members on LOA roster beneath it. The roster shows member mentions, return dates, and remaining time; long rosters paginate. Configure community branding/icon, branding.colors.panel, and templates.loaPanel for your own theme. Refresh panels after changing the theme.
+
+Staff click Request Leave of Absence and enter a descriptive username, duration from 1d through 30d, and reason. Discord identity comes from the submitting member; the form does not change Minecraft linking. Only one pending or active request is allowed. The requester can withdraw a pending request through the submission reply or /loa status.
+
+New requests mention the LOA Admin role in LOA In Progress. Admins Accept or Deny; denial requires a reason. Approval starts leave immediately and calculates an end time using consecutive 24-hour days. The bot assigns LOA and posts the accepted request, including its dates and reason, to Accepted LOA. Repeated or conflicting decisions cannot apply twice.
+
+Approval, denial, expiry, and early return send DMs. Blocked DMs are recorded privately and do not reverse the decision. Role and message work is saved for retry after an outage; Discord failures or queued work can delay delivery. The original review and accepted messages reflect the current leave status. Staff status lookups show only approved leave for other members; pending/denied details remain private to the requester and authorized reviewers.
+
+Requesters can use End My LOA or /loa status to return early. LOA Admins use /loa end member reason with a required reason. Expiry removes the LOA role automatically, even after restart or disabling new requests. On rejoin, only still-active leave restores its role. Existing approved leave keeps its saved role/channel mappings.
+
+Any approved leave overlapping a month exempts that tester from the entire month's quota. Early return uses actual leave time; already-overlapping months remain exempt. /stats, /testerstats and monthly quota reports show LOA exempt when applicable. Completed test counts and leaderboards are unchanged. Active tester sessions continue and /start remains available.
+
+Old configurations/backups without LOA fields remain supported. New portable backups preserve leave history and jobs. Future start dates and extensions are not included. Rehearse permissions, decisions, DMs, expiry, early return, rejoin, roster updates, and quota boundaries in a test server before rollout.
 
 ---PAGE---
 # 11. Run continuously on a Linux VM
@@ -462,4 +484,4 @@ Supabase RPC and row-level security:
 https://supabase.com/docs/reference/javascript/rpc
 https://supabase.com/docs/guides/database/postgres/row-level-security
 
-For exact local behavior, consult src/config.ts, src/domain/service.ts, src/discord/runtime.ts, and docs/STATUS.md. This guide documents the 0.1.1 candidate; repeat validation after changing code, dependencies, roles, or databases. Full command permissions are in docs/COMMANDS.txt; dedicated live checks are in docs/LIVE-REHEARSAL.md and docs/DATABASE-REHEARSAL.md. Measured local volume checks are in docs/LOAD-CHECKS.md.
+For exact local behavior, consult src/config.ts, src/domain/service.ts, src/discord/runtime.ts, and docs/STATUS.md. This guide documents the 0.2.0 candidate; repeat validation after changing code, dependencies, roles, or databases. Full command permissions are in docs/COMMANDS.txt; dedicated live checks are in docs/LIVE-REHEARSAL.md and docs/DATABASE-REHEARSAL.md. Measured local volume checks are in docs/LOAD-CHECKS.md.

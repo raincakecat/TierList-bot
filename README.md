@@ -2,6 +2,8 @@
 
 Configurable implementation candidate for Crystal PvP verification, regional testing, tier lists, support tickets, restrictions, deadlines, and portable backups.
 
+Version 0.2.0 adds staff Leave of Absence requests, approval controls, timed roles, notifications, and quota exemptions.
+
 **Full package:** [Download the ZIP with compiled files and PDF setup guide](full-package/full-package.zip), or [read the PDF guide](docs/Full-Setup-Guide.pdf).
 
 **Status:** code builds and automated local checks run. It has not been connected to a live Discord server or a real Supabase/PostgreSQL deployment. Rehearse in a test server before production cutover. See `docs/STATUS.md` for the remaining release checks.
@@ -48,6 +50,18 @@ Verification validates an account's existence and UUID, then links it to the Dis
 Normal queue tests open in regional categories. `/passeval` records LT3 and moves the ticket to HT3 testing. HT3/LT2/HT2/LT1 players request the next high tier directly. Staff close tests with a tier or Test Discontinued. Previous Rank is captured when the ticket opens. HT3 list entry is manual; LT2 and higher list entry is automatic.
 
 Support includes five configurable defaults and custom types. Type-specific access applies even in overflow categories. Opening messages are pinned. Only responsible staff can use the close button. Every enabled ticket type requires an archive channel.
+
+## Staff leave of absence
+
+Enable `modules.loa` in the setup wizard or configuration. Map `loa.roleId`, `permissionGroups.loaAdmin`, and `channels.requestLoa`, `loaInProgress`, and `acceptedLoa`. Setup creates missing resources. The LOA role must be separate from permission/tier/region/waitlist roles. Request LOA and Accepted LOA are Staff/LOA Admin/Owner visible; LOA In Progress is private to LOA Admin/Owner. Review privacy on supplied existing channels.
+
+The Request LOA channel contains a branded portal/button and an automatically updated Members on LOA roster with return dates. Colors, community branding/icon, and `templates.loaPanel` are configurable. The roster paginates and removes obsolete pages. Staff submit username, whole-day duration `1d`–`30d`, and reason. One pending or active request is allowed per Discord member; the username is descriptive and does not change Minecraft linking.
+
+LOA Admins/Owners accept or deny in the private review channel. Denial requires a reason. Approval starts the timer, grants the LOA role, and posts to Accepted LOA. Decisions cannot be applied twice. Requesters receive approval/denial/expiry/early-end DMs; blocked DMs are recorded privately without reversing decisions.
+
+Requesters can withdraw pending requests or end their leave early through buttons or `/loa status`. LOA Admins use `/loa end member reason`. Expiry removes the role automatically, including after restart or disabling new requests. Active leave is restored on rejoin; expired leave is not restored. Existing leave keeps its saved role and channel mappings.
+
+Any approved leave overlapping a month exempts that tester from the entire month's quota. Early termination uses actual leave time. Counts/leaderboards remain unchanged, active sessions are not stopped, and `/start` remains available. Historical leave is retained in backups for quota reporting. No future-start scheduling or extensions are included.
 
 ## Archives and recovery
 

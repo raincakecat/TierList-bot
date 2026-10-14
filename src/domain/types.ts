@@ -2,7 +2,7 @@ export const REGIONS = ['NA', 'EU', 'AS'] as const;
 export type Region = typeof REGIONS[number];
 export const TIERS = ['Unranked','LT5','HT5','LT4','HT4','LT3','HT3','LT2','HT2','LT1','HT1'] as const;
 export type Tier = typeof TIERS[number];
-export const GROUPS = ['owner','botAdmin','staff','verifiedTester','regulator','listAdmin','restrictionKey','highStaff','trainee','partnershipManager'] as const;
+export const GROUPS = ['owner','botAdmin','staff','verifiedTester','regulator','listAdmin','restrictionKey','highStaff','trainee','partnershipManager','loaAdmin'] as const;
 export type Group = typeof GROUPS[number];
 export type Actor = { id: string; roles: string[]; administrator: boolean; channelAccess?: boolean };
 export interface Player {
@@ -26,9 +26,18 @@ export interface Ticket {
 }
 export interface Restriction { id: string; playerId: string; uuid: string; reason: string; until: number | null; actor: string }
 export interface Job {
-  id: string; kind: 'open'|'roles'|'archive'|'result'|'notice'|'lists'|'queues'|'deadline';
+  id: string; kind: 'open'|'roles'|'archive'|'result'|'notice'|'lists'|'queues'|'deadline'|'loa';
   data: Record<string, unknown>; status: 'pending'|'working'|'done'; attempts: number;
   nextAt: number; createdAt?:number; leaseUntil?: number; checkpoints: Record<string, unknown>;
+}
+export interface Leave {
+  id:string; memberId:string; username:string; days:number; reason:string;
+  status:'pending'|'active'|'denied'|'withdrawn'|'ended'|'expired'; requestedAt:number;
+  reviewedBy?:string; reviewedAt?:number; denialReason?:string;
+  startsAt?:number; endsAt?:number; endedAt?:number; endedBy?:string; endReason?:string;
+  roleId:string; reviewChannelId:string; acceptedChannelId:string; adminRoles:string[];
+  reviewMessageId?:string; acceptedMessageId?:string;
+  notifications?:Record<string,'sent'|'blocked'>;
 }
 export interface State {
   version: 1; guildId: string; initialized: boolean; maintenance: boolean;
@@ -44,6 +53,7 @@ export interface State {
   migrationSession?: {filename:string;id:string;done:string[];keys:string[]};
   reviews?: Record<string,{filename:string;key:string;field:string;message:string;resolved:boolean;messageId?:string}>;
   lastAutomaticBackupAt?: number;
+  leaves?:Record<string,Leave>;
 }
 export function emptyState(guildId:string): State {
   return {version:1,guildId,initialized:false,maintenance:false,players:{},queues:{NA:[],EU:[],AS:[]},testers:{},tickets:{},restrictions:[],lists:{},completions:[],jobs:{},panels:{},audit:[]};

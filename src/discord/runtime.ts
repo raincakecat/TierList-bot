@@ -18,6 +18,8 @@ import { provision, setupPreview, validateDiscord } from './setup.js';
 import { WizardSessions, requireWizard, wizardPolicy, wizardView, wizardModal } from './wizard.js';
 import { healthSummary } from './health.js';
 import { alreadyVerified } from './verification.js';
+import { LeaveService, currentLeave, quotaExempt } from '../domain/loa.js';
+import { LeaveGateway, leaveEmbed } from './loa-gateway.js';
 
 type Pending={actor:string;expires:number;fingerprint:string;action:()=>Promise<string>;group:'owner'|'setup';recovery?:boolean};
 export class Runtime {
@@ -33,8 +35,10 @@ export class Runtime {
   private setupErrors:string[]=[];
   private editingImports=new Set<string>();
   private wizard=new WizardSessions();
+  private leave:LeaveService;
   private startedAt=Date.now();
   constructor(private client:Client,private file:ConfigFile,private store:Store){
+    this.leave=new LeaveService(store,()=>file.value);
     this.service=new Service(store,()=>file.value);this.gateway=new Gateway(client,store,()=>file.value);
     this.worker=new Worker(store,(job,save)=>this.gateway.job(job,save),j=>this.gateway.failure(j));
   }
@@ -49,18 +53,18 @@ export class Runtime {
     this.timers.push(setInterval(()=>void this.renew().catch(()=>{this.running=false;console.error('Database lease unavailable; stopping Discord connection.');this.client.destroy();}),15_000));
     this.client.on('interactionCreate',i=>void this.interact(i));
     this.client.on('guildMemberRemove',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.store.change(s=>{s.departures??=[];if(!s.departures.includes(m.id))s.departures.push(m.id);removeQueue(s,m.id);enqueue(s,'queues',{},Date.now());}).catch(()=>console.error('Member departure could not be recorded.'));});
-    this.client.on('guildMemberAdd',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.store.operations.shared(async()=>{const s=await this.store.read();if(s.players[m.id])await this.gateway.playerRoles(s.players[m.id]!);}).catch(()=>console.error('Member role restoration needs review.'));});
+    this.client.on('guildMemberAdd',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.store.operations.shared(async()=>{const s=await this.store.read();if(s.players[m.id])await this.gateway.playerRoles(s.players[m.id]!);await new LeaveGateway(this.client,this.store,()=>this.file.value,this.gateway).syncRole(m.id);}).catch(()=>console.error('Member role restoration needs review.'));});
     this.client.on('guildMemberUpdate',(old,m)=>{if(m.guild.id!==this.file.value.community.guildId||this.gateway.synchronizingRoles.has(m.id))return;const configured=Object.values(this.file.value.tierRoleIds).filter(Boolean);if(configured.some(id=>old.roles.cache.has(id!)!==m.roles.cache.has(id!))||this.file.value.permissionGroups.verifiedTester.some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id))||this.file.value.permissionGroups.staff.some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id)))void this.reconcileMember(m.id).catch(()=>console.error('Member role reconciliation needs review.'));});
     console.log('Crystal bot connected.');
   }
   private async renew(){await this.store.renewLease(this.lease,Date.now()+60_000);}
   private async loop(){if(this.store.operations.recovering)return;return this.store.operations.shared(()=>this.cycle());}
   private async cycle(){if(!this.running||this.busy)return;this.busy=true;try{
-    await this.service.tick();await this.worker.runOnce();const now=Date.now(),s=await this.store.read();
+    await this.service.tick();await this.leave.tick();await this.worker.runOnce();const now=Date.now(),s=await this.store.read();
     if(s.initialized&&!readiness(this.file.value).length&&now-this.lastRefresh>60_000){await this.gateway.queues();this.lastRefresh=now;}
     if(now-(s.lastAutomaticBackupAt??0)>86_400_000){await new Backups(this.store,this.file.value.backups.directory).create(true);await this.store.change(s=>s.lastAutomaticBackupAt=now);await this.gateway.cleanupImages();}
     const channelId=this.file.value.channels.staffActionLog;if(channelId)await this.store.change(state=>{for(const e of state.audit)if(!state.jobs[`audit-${e.id}`])enqueue(state,'notice',{channelId,content:`${new Date(e.at).toISOString()} | ${e.actor} | ${e.action} | ${e.target}`},now,`audit-${e.id}`);});
-    if(this.file.value.modules.testerQuotas&&s.initialized){const month=previousMonth(now,this.file.value.community.timezone),jobId=`quota-${month}`;if(!s.jobs[jobId])await this.store.change(state=>{const rows=Object.values(state.players).filter(p=>p.testerSince&&dateKey(p.testerSince,this.file.value.community.timezone).slice(0,7)<month).map(p=>{const count=state.completions.filter(e=>e.tester===p.id&&dateKey(e.at,this.file.value.community.timezone).slice(0,7)===month).length;return `<@${p.id}>: ${count} / ${this.file.value.testing.monthlyTesterQuota}`;});enqueue(state,'notice',{channelId:this.file.value.channels.quotaReports,content:`Monthly tester quota report: ${month}\n${rows.join('\n')||'No eligible testers this period.'}`},now,jobId);});}
+    if(this.file.value.modules.testerQuotas&&s.initialized){const month=previousMonth(now,this.file.value.community.timezone),jobId=`quota-${month}`;if(!s.jobs[jobId])await this.store.change(state=>{const rows=Object.values(state.players).filter(p=>p.testerSince&&dateKey(p.testerSince,this.file.value.community.timezone).slice(0,7)<month).map(p=>{const count=state.completions.filter(e=>e.tester===p.id&&dateKey(e.at,this.file.value.community.timezone).slice(0,7)===month).length;return `<@${p.id}>: ${count} / ${quotaExempt(state,p.id,month,this.file.value.community.timezone,now)?'LOA exempt':this.file.value.testing.monthlyTesterQuota}`;});enqueue(state,'notice',{channelId:this.file.value.channels.quotaReports,content:`Monthly tester quota report: ${month}\n${rows.join('\n')||'No eligible testers this period.'}`},now,jobId);});}
     if(!s.maintenance)for(const id of s.departures??[]){const tickets=Object.values(s.tickets).filter(t=>t.opener===id&&t.status==='open');const internal:Actor={id:'system',roles:this.file.value.permissionGroups.owner,administrator:false,channelAccess:true};for(const t of tickets)await this.service.close(internal,t.id,'discontinued','Member left the server');await this.store.change(state=>{if(!Object.values(state.tickets).some(t=>t.opener===id&&t.status==='opening'))state.departures=(state.departures??[]).filter(x=>x!==id);});}
     for(const [id,p]of this.pending)if(p.expires<now)this.pending.delete(id);
   }finally{this.busy=false;}}
@@ -93,6 +97,7 @@ export class Runtime {
     try{
       const a=await this.actor(i);
       if(await this.wizardInteraction(i,a))return;
+      if(await this.leaveInteraction(i,a))return;
       if(i.isButton()&&i.customId.startsWith('review:')){requireGroup(this.file.value,a,'botAdmin');const id=i.customId.split(':')[1]!,review=(await this.store.read()).reviews?.[id];if(!review||review.resolved)throw new UserError('This review has already been resolved.');
         if(['region','openingTier'].includes(review.field)){const options=review.field==='region'?['NA','EU','AS'].filter(r=>this.file.value.regions[r as 'NA'].enabled):[...TIERS];await i.reply({content:review.message,flags:MessageFlags.Ephemeral,components:[new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`reviewvalue:${id}`).setPlaceholder('Choose the corrected value').addOptions(options.map(value=>({label:value,value}))))]});}
         else if(['tester','ign','openingIgn','type','opener'].includes(review.field))await i.showModal(new ModalBuilder().setCustomId(`reviewedit:${id}`).setTitle('Correct Import Record').addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('value').setLabel(`Correct ${review.field}`).setStyle(TextInputStyle.Short).setMaxLength(100).setRequired(true))));
@@ -133,6 +138,7 @@ export class Runtime {
       }else if(i.isChatInputCommand()){
         const o=i.options,c=this.file.value,name=i.commandName,member=()=>o.getUser('member',true).id,str=(key:string)=>o.getString(key,true),ticket=()=>this.ticketId(i);
         switch(name){
+          case 'loa':{const s=await this.store.read();if(o.getSubcommand()==='end'){requireGroup(c,a,'loaAdmin');const l=currentLeave(s,member());if(!l||l.status!=='active')throw new UserError('This member has no active LOA.');await this.leave.end(a,l.id,str('reason'),true);reply='LOA ended. Role removal and notifications are queued.';}else{requireGroup(c,a,'staff');const id=o.getUser('member')?.id??a.id,canReview=id===a.id||allowed(c,a,'loaAdmin'),l=(canReview?currentLeave(s,id):undefined)??Object.values(s.leaves??{}).filter(l=>l.memberId===id&&(canReview||l.startsAt!==undefined)).sort((a,b)=>b.requestedAt-a.requestedAt)[0];if(!l){reply='No saved LOA was found.';break;}await i.editReply({embeds:[leaveEmbed(l,c)],components:l.memberId===a.id&&l.status==='pending'?[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`loa:withdraw:${l.id}`).setLabel('Withdraw Request').setStyle(ButtonStyle.Secondary))]:l.memberId===a.id&&l.status==='active'?[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`loa:end:${l.id}`).setLabel('End My LOA').setStyle(ButtonStyle.Secondary))]:[],allowedMentions:{parse:[]}});return;}break;}
           case 'health':requireGroup(c,a,'botAdmin');reply=await healthSummary(this.store,c,this.startedAt,this.setupErrors.length);break;
           case 'profile':{const id=o.getUser('member')?.id??a.id,p=(await this.store.read()).players[id];if(p){const embed=new EmbedBuilder().setTitle('Player Profile').setColor(c.branding.colors.panel as `#${string}`).addFields({name:'Discord',value:`<@${id}>`},{name:'Minecraft',value:p.ign??'Not linked'},{name:'Rank',value:tierName(p.tier)},{name:'Region',value:p.region??'Not selected'});if(p.uuid)embed.setThumbnail(`https://visage.surgeplay.com/bust/128/${p.uuid}`);await i.editReply({embeds:[embed],allowedMentions:{parse:[]}});return;}reply='This player has no saved profile.';break;}
           case 'leave':await this.service.leave(a);break;
@@ -192,6 +198,19 @@ export class Runtime {
       try{if(i.deferred||i.replied)await i.editReply({content:message.slice(0,1950),components:[],allowedMentions:{parse:[]}});else await i.reply({content:message.slice(0,1950),flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});}catch{}
     }
   }
+  private async leaveInteraction(i:Interaction,a:Actor):Promise<boolean>{
+    if(!i.isRepliable()||!(i.isButton()||i.isModalSubmit())||!i.customId.startsWith('loa:'))return false;
+    const [,action,id]=i.customId.split(':'),c=this.file.value;
+    if(i.isButton()&&action==='request'){requireGroup(c,a,'staff');if(i.channelId!==c.channels.requestLoa||!c.modules.loa)throw new UserError('Use the current Request LOA panel.');if(this.setupErrors.length)throw new UserError('Finish configuration before opening LOA requests.');
+      const s=await this.store.read();if(!s.initialized||s.maintenance)throw new UserError('LOA requests are temporarily unavailable.');if(currentLeave(s,a.id))throw new UserError('You already have a pending or active LOA.');const modal=new ModalBuilder().setCustomId('loa:submit').setTitle('Request Leave of Absence');
+      for(const [key,label,max,style]of [['username','Your username',100,TextInputStyle.Short],['duration','Duration: 1d to 30d (example: 7d)',3,TextInputStyle.Short],['reason','Reason for leave',1000,TextInputStyle.Paragraph]] as const)modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId(key).setLabel(label).setStyle(style).setMaxLength(max).setRequired(true)));await i.showModal(modal);return true;
+    }
+    if(i.isButton()&&action==='deny'){requireGroup(c,a,'loaAdmin');const l=(await this.store.read()).leaves?.[id!];if(!l||l.status!=='pending'||i.channelId!==l.reviewChannelId)throw new UserError('This pending request is unavailable.');await i.showModal(new ModalBuilder().setCustomId(`loa:denial:${id}`).setTitle('Deny LOA Request').addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Required denial reason').setStyle(TextInputStyle.Paragraph).setMaxLength(1000).setRequired(true))));return true;}
+    await i.deferReply({flags:MessageFlags.Ephemeral});
+    if(i.isModalSubmit()&&action==='submit'){if(i.channelId!==c.channels.requestLoa||this.setupErrors.length)throw new UserError('Use the configured Request LOA panel.');const l=await this.leave.request(a,i.fields.getTextInputValue('username'),i.fields.getTextInputValue('duration'),i.fields.getTextInputValue('reason'));await i.editReply({content:'LOA submitted for approval.',components:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`loa:withdraw:${l.id}`).setLabel('Withdraw Request').setStyle(ButtonStyle.Secondary))]});return true;}
+    if(action==='accept'||action==='denial'){requireGroup(c,a,'loaAdmin');const l=(await this.store.read()).leaves?.[id!];if(!l||i.channelId!==l.reviewChannelId)throw new UserError('Use the saved LOA review message.');let present=true;if(action==='accept'){try{await(await this.gateway.guild()).members.fetch({user:l.memberId,force:true});}catch(error){if((error as {code?:number}).code!==10007)throw error;present=false;}}await this.leave.decide(a,id!,action==='accept'?'accept':'deny',i.isModalSubmit()?i.fields.getTextInputValue('reason'):'',present);}
+    else if(action==='withdraw')await this.leave.withdraw(a,id!);else if(action==='end')await this.leave.end(a,id!);else throw new UserError('Unknown LOA control.');await i.editReply({content:'LOA updated. Saved role/message/notification work is queued.',components:[],allowedMentions:{parse:[]}});return true;
+  }
   private async wizardInteraction(i:Interaction,a:Actor):Promise<boolean>{
     if(!i.isRepliable()||!(i.isButton()||i.isStringSelectMenu()||i.isModalSubmit())||!i.customId.startsWith('wizard:'))return false;
     const [,id,action]=i.customId.split(':'),state=await this.store.read(),session=this.wizard.find(id!,a,this.file.value,state);
@@ -229,7 +248,8 @@ export class Runtime {
   }
   private async statistics(command:string,id:string,period:string){const s=await this.store.read(),timezone=this.file.value.community.timezone,now=Date.now(),today=dateKey(now,timezone),start=periodStart(now,timezone,period==='weekly'?'weekly':'monthly');
     const filtered=s.completions.filter(e=>{const d=dateKey(e.at,timezone);return e.at<=now&&(period==='all'||(d>=start&&d<=today));}),counts:Record<string,number>={};for(const e of filtered)counts[e.tester]=(counts[e.tester]??0)+1;
-    if(command==='stats')return `<@${id}>: ${counts[id]??0} completed tests this month; ${s.completions.filter(e=>e.tester===id).length} all time.`;
-    return Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([id,n],i)=>`${i+1}. <@${id}> — ${n}${command==='testerstats'&&this.file.value.modules.testerQuotas?` / ${this.file.value.testing.monthlyTesterQuota}`:''}`).join('\n')||'No completed tests in this period.';
+    if(command==='stats')return `<@${id}>: ${counts[id]??0} completed tests this month; ${s.completions.filter(e=>e.tester===id).length} all time.${this.file.value.modules.testerQuotas&&quotaExempt(s,id,today.slice(0,7),timezone,now)?' LOA exempt.':''}`;
+    if(command==='testerstats')for(const p of Object.values(s.players))if(p.testerSince)counts[p.id]??=0;
+    return Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([id,n],i)=>`${i+1}. <@${id}> — ${n}${command==='testerstats'&&this.file.value.modules.testerQuotas?` / ${quotaExempt(s,id,today.slice(0,7),timezone,now)?'LOA exempt':this.file.value.testing.monthlyTesterQuota}`:''}`).join('\n')||'No completed tests in this period.';
   }
 }

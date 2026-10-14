@@ -14,3 +14,5 @@ Rehearse verification, duplicate account rejection, regional access, normal queu
 Use only disposable test data when checking restore or migration. Keep the old community bots running until the isolated rehearsal and a reviewed takeover plan pass. See STATUS.md for the remaining release checks.
 
 Use `/health` as Bot Admin/Owner to check job and backup status. Follow LIVE-REHEARSAL.md for wizard privacy, archive retention, and recovery race tests; remote database checks are described in DATABASE-REHEARSAL.md.
+
+For LOA rehearsal, enable the module, map/create the LOA and LOA Admin roles and the Request LOA/LOA In Progress/Accepted LOA channels, then refresh panels. Check the portal/roster, admin decisions, DMs, expiry, early return, and monthly quota exemption with disposable records.

@@ -11,6 +11,7 @@ export function wizardResources(c:Config):Resource[]{
   for(const tier of Object.keys(c.tierRoleIds))add(`tierRoleIds.${tier}`,`Tier role: ${tier}`);
   for(const region of REGIONS)for(const field of ['regionRoleId','waitlistRoleId','queueChannelId','testCategoryId'])add(`regions.${region}.${field}`,`${region}: ${field}`);
   for(const channel of Object.keys(c.channels))add(`channels.${channel}`,`Channel: ${channel}`);
+  add('loa.roleId','Role: LOA');
   add('categories.highTests','Category: High Tests');add('categories.overflow','Categories: Overflow',true);
   for(const tier of Object.keys(c.tierLists.channelIds))add(`tierLists.channelIds.${tier}`,`List channel: ${tier}`);
   c.supportTicketTypes.forEach((t,index)=>{add(`supportTicketTypes.${index}.categoryId`,`${t.name}: category`);add(`supportTicketTypes.${index}.archiveChannelId`,`${t.name}: archive`);});
@@ -46,7 +47,7 @@ export function wizardView(s:Session){const c=s.draft,embed=new EmbedBuilder().s
   const rows:(ActionRowBuilder<ButtonBuilder>|ActionRowBuilder<StringSelectMenuBuilder>)[]=[new ActionRowBuilder<ButtonBuilder>().addComponents(button(s,'community','Community'),button(s,'features','Features / Regions'),button(s,'policy','Cooldowns / Quota'),button(s,'resources','Resources'),button(s,'review','Review',ButtonStyle.Primary))];
   if(s.view==='features'){
     rows.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`wizard:${s.id}:regions`).setPlaceholder('Enabled regions').setMinValues(0).setMaxValues(3).addOptions(REGIONS.map(r=>({label:r,value:r,default:c.regions[r].enabled})))));
-    rows.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`wizard:${s.id}:modules`).setPlaceholder('Enabled features').setMinValues(0).setMaxValues(5).addOptions(Object.entries(c.modules).map(([key,on])=>({label:key,value:key,default:on})))));
+    rows.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`wizard:${s.id}:modules`).setPlaceholder('Enabled features').setMinValues(0).setMaxValues(Object.keys(c.modules).length).addOptions(Object.entries(c.modules).map(([key,on])=>({label:key,value:key,default:on})))));
   }
   if(s.view==='resources'){const resources=wizardResources(c),pages=Math.ceil(resources.length/25);s.resourcePage=Math.max(0,Math.min(pages-1,s.resourcePage));const slice=resources.slice(s.resourcePage*25,s.resourcePage*25+25);
     rows.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`wizard:${s.id}:mapping`).setPlaceholder(`Resource mappings (${s.resourcePage+1}/${pages})`).addOptions(slice.map((r,index)=>({label:r.label.slice(0,100),value:String(s.resourcePage*25+index),description:String(get(c,r.path)??'Create missing').slice(0,100)||'Create missing'})))));

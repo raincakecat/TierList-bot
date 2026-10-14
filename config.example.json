@@ -11,15 +11,20 @@
       "urlEnv": "SUPABASE_URL",
       "serviceKeyEnv": "SUPABASE_SERVICE_ROLE_KEY"
     },
-    "postgresql": { "connectionStringEnv": "DATABASE_URL" },
-    "sqlite": { "file": "./data/crystal-bot.sqlite" }
+    "postgresql": {
+      "connectionStringEnv": "DATABASE_URL"
+    },
+    "sqlite": {
+      "file": "./data/crystal-bot.sqlite"
+    }
   },
   "modules": {
     "testing": true,
     "supportTickets": true,
     "tierLists": true,
     "testerQuotas": false,
-    "migration": false
+    "migration": false,
+    "loa": false
   },
   "permissionGroups": {
     "owner": [],
@@ -31,7 +36,8 @@
     "restrictionKey": [],
     "highStaff": [],
     "trainee": [],
-    "partnershipManager": []
+    "partnershipManager": [],
+    "loaAdmin": []
   },
   "regions": {
     "NA": {
@@ -57,11 +63,16 @@
     }
   },
   "tierRoleIds": {
-    "LT5": null, "HT5": null,
-    "LT4": null, "HT4": null,
-    "LT3": null, "HT3": null,
-    "LT2": null, "HT2": null,
-    "LT1": null, "HT1": null
+    "LT5": null,
+    "HT5": null,
+    "LT4": null,
+    "HT4": null,
+    "LT3": null,
+    "HT3": null,
+    "LT2": null,
+    "HT2": null,
+    "LT1": null,
+    "HT1": null
   },
   "channels": {
     "verificationPanel": null,
@@ -72,7 +83,10 @@
     "quotaReports": null,
     "staffActionLog": null,
     "operationalLog": null,
-    "botReview": null
+    "botReview": null,
+    "requestLoa": null,
+    "loaInProgress": null,
+    "acceptedLoa": null
   },
   "categories": {
     "highTests": null,
@@ -102,9 +116,15 @@
       "name": "General Support",
       "categoryId": null,
       "archiveChannelId": null,
-      "accessGroups": ["staff"],
-      "openingPingGroups": ["trainee"],
-      "closingGroups": ["staff"],
+      "accessGroups": [
+        "staff"
+      ],
+      "openingPingGroups": [
+        "trainee"
+      ],
+      "closingGroups": [
+        "staff"
+      ],
       "copyImages": false,
       "openingMessage": "Welcome {userMention}! Please describe your issue and our team will get back to you."
     },
@@ -114,9 +134,15 @@
       "name": "Player Report",
       "categoryId": null,
       "archiveChannelId": null,
-      "accessGroups": ["highStaff"],
-      "openingPingGroups": ["highStaff"],
-      "closingGroups": ["highStaff"],
+      "accessGroups": [
+        "highStaff"
+      ],
+      "openingPingGroups": [
+        "highStaff"
+      ],
+      "closingGroups": [
+        "highStaff"
+      ],
       "copyImages": true,
       "openingMessage": "Welcome {userMention}! Please describe the player report and provide relevant evidence."
     },
@@ -126,9 +152,15 @@
       "name": "Staff Report",
       "categoryId": null,
       "archiveChannelId": null,
-      "accessGroups": ["highStaff"],
-      "openingPingGroups": ["highStaff"],
-      "closingGroups": ["highStaff"],
+      "accessGroups": [
+        "highStaff"
+      ],
+      "openingPingGroups": [
+        "highStaff"
+      ],
+      "closingGroups": [
+        "highStaff"
+      ],
       "copyImages": true,
       "openingMessage": "Welcome {userMention}! Please describe the staff report and provide relevant evidence."
     },
@@ -138,9 +170,15 @@
       "name": "Restriction Appeal",
       "categoryId": null,
       "archiveChannelId": null,
-      "accessGroups": ["highStaff"],
-      "openingPingGroups": ["highStaff"],
-      "closingGroups": ["highStaff"],
+      "accessGroups": [
+        "highStaff"
+      ],
+      "openingPingGroups": [
+        "highStaff"
+      ],
+      "closingGroups": [
+        "highStaff"
+      ],
       "copyImages": true,
       "openingMessage": "Welcome {userMention}! Please explain your restriction appeal and provide relevant evidence."
     },
@@ -150,9 +188,15 @@
       "name": "Partnership Request",
       "categoryId": null,
       "archiveChannelId": null,
-      "accessGroups": ["partnershipManager"],
-      "openingPingGroups": ["partnershipManager"],
-      "closingGroups": ["partnershipManager"],
+      "accessGroups": [
+        "partnershipManager"
+      ],
+      "openingPingGroups": [
+        "partnershipManager"
+      ],
+      "closingGroups": [
+        "partnershipManager"
+      ],
       "copyImages": false,
       "openingMessage": "Welcome {userMention}! Please describe your community and partnership request."
     }
@@ -172,7 +216,8 @@
     "supportPanel": "Choose a ticket type to contact the appropriate team.",
     "testOpeningTitle": "{minecraftIgn}'s Information",
     "resultTitle": "{discordUsername}'s Test Results 🏆",
-    "resultAboveEmbed": "{userMention}"
+    "resultAboveEmbed": "{userMention}",
+    "loaPanel": "**Taking a break from staff duties?**\nRequest leave below for review by the LOA team.\n\n**What to include**\n• Your username\n• Duration: 1d–30d\n• Your reason\n\nApproved leave starts when accepted. You will receive a DM with the decision."
   },
   "archival": {
     "directory": "./data/archives",
@@ -188,5 +233,8 @@
   "setup": {
     "mode": "existing-or-create",
     "requirePreviewConfirmation": true
+  },
+  "loa": {
+    "roleId": null
   }
 }

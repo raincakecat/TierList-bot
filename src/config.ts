@@ -13,17 +13,18 @@ export const configSchema = z.object({
   schemaVersion:z.literal(1),
   community:z.object({guildId:id,name:z.string().min(1).max(100),timezone:z.string().refine(v=>{try{new Intl.DateTimeFormat('en',{timeZone:v});return true;}catch{return false;}},'Invalid timezone')}).strict(),
   database:z.object({backend:z.enum(['supabase','postgresql','sqlite']),supabase:z.object({urlEnv:z.string().min(1),serviceKeyEnv:z.string().min(1)}),postgresql:z.object({connectionStringEnv:z.string().min(1)}),sqlite:z.object({file:z.string().min(1)})}).strict(),
-  modules:z.object({testing:z.boolean(),supportTickets:z.boolean(),tierLists:z.boolean(),testerQuotas:z.boolean(),migration:z.boolean()}).strict(),
-  permissionGroups:z.object(Object.fromEntries(GROUPS.map(k=>[k,ids])) as Record<Group,typeof ids>).strict(),
+  modules:z.object({testing:z.boolean(),supportTickets:z.boolean(),tierLists:z.boolean(),testerQuotas:z.boolean(),migration:z.boolean(),loa:z.boolean().default(false)}).strict(),
+  permissionGroups:z.object(Object.fromEntries(GROUPS.map(k=>[k,k==='loaAdmin'?ids.default([]):ids])) as Record<Group,typeof ids>).strict(),
+  loa:z.object({roleId:id}).strict().default({roleId:null}),
   regions:z.object({NA:regionSchema,EU:regionSchema,AS:regionSchema}).strict(),
   tierRoleIds:z.object({LT5:id,HT5:id,LT4:id,HT4:id,LT3:id,HT3:id,LT2:id,HT2:id,LT1:id,HT1:id}).strict(),
-  channels:z.object({verificationPanel:id,supportPanel:id,results:id,testerAlerts:id,testingArchives:id,quotaReports:id,staffActionLog:id,operationalLog:id,botReview:id}).strict(),
+  channels:z.object({verificationPanel:id,supportPanel:id,results:id,testerAlerts:id,testingArchives:id,quotaReports:id,staffActionLog:id,operationalLog:id,botReview:id,requestLoa:id.default(null),loaInProgress:id.default(null),acceptedLoa:id.default(null)}).strict(),
   categories:z.object({highTests:id,overflow:ids}).strict(),
   testing:z.object({queueCapacityPerRegion:z.number().int().positive().max(1000),normalCooldown:duration,highCooldown:duration,monthlyTesterQuota:z.number().int().positive().nullable(),defaultLeaderboardPeriod:z.literal('monthly'),weeklyStartDay:z.literal('Sunday')}).strict(),
   tierLists:z.object({channelIds:z.object({HT3:id,LT2:id,HT2:id,LT1:id,HT1:id}).strict()}).strict(),
   supportTicketTypes:z.array(z.object({key:z.string().regex(/^[a-z][a-z0-9-]{0,30}$/),enabled:z.boolean(),name:z.string().min(1).max(80),categoryId:id,archiveChannelId:id,accessGroups:z.array(group).min(1),openingPingGroups:z.array(group),closingGroups:z.array(group).min(1),copyImages:z.boolean(),openingMessage:z.string().min(1).max(3500)}).strict()),
   branding:z.object({iconUrl:z.url().nullable(),colors:z.object({panel:color,ticket:color,result:color,success:color,error:color}).strict()}).strict(),
-  templates:z.object({verificationPanel:z.string().min(1).max(3500),supportPanel:z.string().min(1).max(3500),testOpeningTitle:z.string().min(1).max(200),resultTitle:z.string().min(1).max(200),resultAboveEmbed:z.string().max(1500)}).strict(),
+  templates:z.object({verificationPanel:z.string().min(1).max(3500),supportPanel:z.string().min(1).max(3500),testOpeningTitle:z.string().min(1).max(200),resultTitle:z.string().min(1).max(200),resultAboveEmbed:z.string().max(1500),loaPanel:z.string().min(1).max(3500).default('**Taking a break from staff duties?**\nRequest leave below for review by the LOA team.\n\n**What to include**\n• Your username\n• Duration: 1d–30d\n• Your reason\n\nApproved leave starts when accepted. You will receive a DM with the decision.')}).strict(),
   archival:z.object({directory:z.string().min(1),imageRetentionDays:z.number().int().positive().max(3650),transcriptRetentionDays:z.null(),minimumDeletionDelaySeconds:z.number().int().min(10)}).strict(),
   backups:z.object({directory:z.string().min(1),schedule:z.literal('daily'),retainSuccessfulAutomaticBackups:z.literal(10)}).strict(),
   setup:z.object({mode:z.literal('existing-or-create'),requirePreviewConfirmation:z.literal(true)}).strict()
@@ -54,6 +55,8 @@ export function readiness(c:Config):string[] {
   }
   if(c.modules.tierLists)for(const [key,v]of Object.entries(c.tierLists.channelIds))need(v,`tierLists.channelIds.${key}`);
   if(c.modules.testerQuotas){need(c.testing.monthlyTesterQuota,'testing.monthlyTesterQuota');need(c.channels.quotaReports,'channels.quotaReports');}
+  if(c.modules.loa){need(c.permissionGroups.staff,'permissionGroups.staff');need(c.permissionGroups.loaAdmin,'permissionGroups.loaAdmin');need(c.loa.roleId,'loa.roleId');for(const key of ['requestLoa','loaInProgress','acceptedLoa'] as const)need(c.channels[key],`channels.${key}`);if(c.loa.roleId&&[...Object.values(c.permissionGroups).flat(),...Object.values(c.tierRoleIds),...REGIONS.flatMap(r=>[c.regions[r].regionRoleId,c.regions[r].waitlistRoleId])].includes(c.loa.roleId))errors.push('LOA role must be separate from permission, tier, region and waitlist roles');}
+  if(c.modules.loa){const mapped=[c.channels.requestLoa,c.channels.loaInProgress,c.channels.acceptedLoa].filter(Boolean);if(new Set(mapped).size!==mapped.length)errors.push('LOA channels must be three separate channels');}
   if(c.modules.supportTickets){need(c.channels.supportPanel,'channels.supportPanel');for(const t of c.supportTicketTypes.filter(t=>t.enabled)){need(t.categoryId,`${t.key}.categoryId`);need(t.archiveChannelId,`${t.key}.archiveChannelId`);for(const g of [...t.accessGroups,...t.closingGroups,...t.openingPingGroups])need(c.permissionGroups[g],`permissionGroups.${g}`);}}
   const seen=new Set<string>();for(const t of c.supportTicketTypes){if(seen.has(t.key))errors.push(`Duplicate ticket type ${t.key}`);seen.add(t.key);}
   const valid=new Set(['communityName','userMention','testerMention','minecraftIgn','discordUsername','region','previousRank','earnedRank','previousTest','preferredServer','deadline']);

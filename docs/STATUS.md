@@ -10,10 +10,11 @@
 - Exclusive restore/transfer fencing with lease renewal; line-safe queue/list pagination and removal of stale pages; historic archive image cleanup.
 - Private `/health`, immediate Already Verified embeds, and an operator-bound Discord setup wizard with draft review/confirmation.
 - GitHub Actions for Windows/Linux build, tests, local load checks and clean package installation.
+- Optional staff LOA portal/roster, admin approval/denial, timed role and durable notifications, withdrawal/early return, saved leave history and monthly quota exemption.
 
 ## Verified locally
 
-45 automated tests passed on Windows with Node v24.18.0. Tests use real local SQLite and in-memory state; mock transport tests do not substitute for an actual Discord server. TypeScript compilation checks the pinned Discord and Supabase interfaces. Recovery races/timeouts, wizard authorization/confirmation, health privacy/failure output, long transcripts and panel cleanup are covered. See LOAD-CHECKS.md for the measured 5,000-player load run.
+61 automated tests passed on Windows with Node v24.18.0. Tests use real local SQLite and in-memory state; mock transport tests do not substitute for an actual Discord server. TypeScript compilation checks the pinned Discord and Supabase interfaces. Recovery races/timeouts, wizard authorization/confirmation, health privacy/failure output, long transcripts, panel cleanup and LOA lifecycle/notifications/quota boundaries are covered. See LOAD-CHECKS.md for the measured 5,000-player load run.
 
 ## Required before calling the build production-ready
 

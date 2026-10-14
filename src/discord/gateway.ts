@@ -8,6 +8,7 @@ import { enqueue, listTiers, removeQueue, tierName } from '../domain/service.js'
 import { REGIONS, type Job, type Player, type State, type Ticket, type Tier } from '../domain/types.js';
 import { rolesFor } from '../domain/permissions.js';
 import type { Store } from '../storage/store.js';
+import { LeaveGateway } from './loa-gateway.js';
 
 export class Gateway {
   public synchronizingRoles=new Set<string>();
@@ -26,6 +27,7 @@ export class Gateway {
       case 'notice':await this.notice(job,ticket,checkpoint);break;
       case 'deadline':{const d=ticket?.deadline;if(ticket?.status==='open'&&d&&d.at===job.data.at&&d.setter===job.data.setter&&ticket.channelId)await this.sendOnce(await this.text(ticket.channelId),job,{content:`<@${d.setter}> ⏳ This ticket has reached its deadline. Please review it.`,allowedMentions:{users:[d.setter],parse:[]}},checkpoint);break;}
       case 'archive':if(ticket)await this.archive(ticket,job,checkpoint);break;
+      case 'loa':await new LeaveGateway(this.client,this.store,()=>this.config,this).job(job,checkpoint);await this.leavePanels();break;
     }
   }
   async failure(job:Job){const id=this.config.channels.operationalLog;if(!id)return;await(await this.text(id)).send({content:`An operation needs attention: ${job.kind}${job.data.ticketId?` for ticket ${String(job.data.ticketId)}`:''}. It is saved and will retry. No unsaved ticket will be deleted.`,allowedMentions:{parse:[]}});}
@@ -97,7 +99,7 @@ export class Gateway {
     const stages:Partial<Record<Tier,Tier[]>>={HT3:['HT3'],LT2:['HT3','LT2'],HT2:['LT2','HT2'],LT1:['LT2','HT2','LT1'],HT1:['LT2','HT2','LT1','HT1']};
     return `<@${t.opener}> - ${t.openingIgn??'Player'} - **Promoted to/Failed ${tierName(tier)}**\n\n${tier==='HT3'?'*Passed Evaluation*\n':''}${(stages[tier]??[tier]).map(stage=>`__**${stage} Fights:**__\n> Won/Lost 0-0 vs. (IGN)${tier==='HT3'?'':'\n> Won/Lost 0-0 vs. (IGN)'}`).join('\n\n')}`;
   }
-  private async sendOnce(ch:TextChannel,j:Job,options:MessageCreateOptions,save:(k:string,v:unknown)=>Promise<void>){
+  async sendOnce(ch:TextChannel,j:Job,options:MessageCreateOptions,save:(k:string,v:unknown)=>Promise<void>){
     if(j.checkpoints.messageId){const found=await ch.messages.fetch(String(j.checkpoints.messageId)).catch(()=>null);if(found)return found;}
     const reference=`Reference ${j.id}`;
     // Persisted reference permits recovery even after Discord's nonce window expires.
@@ -112,9 +114,17 @@ export class Gateway {
     const message=await ch.send({...options,allowedMentions:{parse:[]}});await this.store.change(s=>{s.panels[key]=message.id;});
   }
   async panels(){const c=this.config;
+    await this.leavePanels();
     if(c.modules.testing)await this.upsertPanel('verification',await this.text(c.channels.verificationPanel!),{embeds:[new EmbedBuilder().setTitle(`${c.community.name} | Testing`).setDescription(render(c.templates.verificationPanel,{communityName:c.community.name})).setColor(c.branding.colors.panel as `#${string}`)],components:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('verify').setLabel('Verify Account').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('waitlist').setLabel('Enter Waitlist').setStyle(ButtonStyle.Primary))]});
     if(c.modules.supportTickets){const kinds=c.supportTicketTypes.filter(t=>t.enabled);for(let page=0;page<Math.ceil(kinds.length/25);page++)await this.upsertPanel(`support:${page}`,await this.text(c.channels.supportPanel!),{embeds:[new EmbedBuilder().setTitle('Contact Support').setDescription(render(c.templates.supportPanel,{communityName:c.community.name})).setColor(c.branding.colors.panel as `#${string}`)],components:[new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId('support').setPlaceholder('Choose a ticket type').addOptions(kinds.slice(page*25,page*25+25).map(t=>({label:t.name,value:t.key}))))]});}
     await this.queues();await this.lists();
+  }
+  async leavePanels(){const c=this.config,s=await this.store.read();if(!c.channels.requestLoa||(!c.modules.loa&&!s.panels.loa))return;const channel=await this.text(c.channels.requestLoa);
+    const embed=new EmbedBuilder().setTitle('🗓️ Staff Leave Portal').setAuthor({name:c.community.name,...(c.branding.iconUrl?{iconURL:c.branding.iconUrl}:{})}).setDescription(render(c.templates.loaPanel,{communityName:c.community.name})).setColor(c.branding.colors.panel as `#${string}`).setFooter({text:'Leave requests • Reviewed by the LOA team'});
+    await this.upsertPanel('loa',channel,{embeds:[embed],components:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('loa:request').setLabel('Request Leave of Absence').setStyle(ButtonStyle.Primary).setDisabled(!c.modules.loa||s.maintenance))]});
+    const active=Object.values(s.leaves??{}).filter(l=>l.status==='active'&&l.endsAt!>Date.now()).sort((a,b)=>a.endsAt!-b.endsAt!||a.memberId.localeCompare(b.memberId));
+    const lines=['Staff members currently on approved leave.','',`**On LOA (${active.length})**`,...active.map(l=>`<@${l.memberId}> — returns <t:${Math.floor(l.endsAt!/1000)}:D> (<t:${Math.floor(l.endsAt!/1000)}:R>)` )];if(!active.length)lines.push('No staff members are currently on LOA.');const pages=paginateLines(lines),keep=new Set<string>();
+    for(let page=0;page<pages.length;page++){const key=`loa-active:${page}`;keep.add(key);await this.upsertPanel(key,channel,{embeds:[new EmbedBuilder().setTitle('🌙 Members on LOA'+(pages.length>1?` (${page+1}/${pages.length})`:'' )).setDescription(pages[page]!).setColor(c.branding.colors.panel as `#${string}`).setFooter({text:'Updates automatically when approved leave changes'}).setTimestamp()],components:[]});}await this.removePanelPages('loa-active',keep,channel.id);
   }
   private async removePanelPages(prefix:string,keep:Set<string>,channelId:string){
     const state=await this.store.read();for(const [key,id]of Object.entries(state.panels)){if(!(key===prefix||key.startsWith(prefix+':'))||keep.has(key))continue;
