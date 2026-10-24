@@ -1,134 +1,105 @@
-**Tier List + Staff Bot — Feature Overview (1/5)**
+**What the new bot does (1/5)**
 
-**Accounts and regional access**
-- Link a Minecraft username to a Discord member using an account/UUID lookup.
-- Save the player's region (NA, EU, or AS) and preferred Minecraft server.
-- Prevent the same Minecraft account from being linked to multiple Discord members at once.
-- Assign regional roles on verification and separate waitlist access roles on waitlist entry.
-- Show an Already Verified embed with the saved IGN, UUID, and account thumbnail.
-- Let Bot Admins unlink an incorrect or lost account without removing the member's Discord rank or cooldown.
-- View saved player information with `/profile`.
+Here’s what I’ve put into the bot so far. It covers tier testing, support tickets and staff LOAs, so those can all be handled in one place.
 
-**Regional testing queues**
-- Separate NA, EU, and AS queues with Join Queue and Leave controls.
-- Tester availability panels, queue positions, and staff queue alerts.
-- `/start`, `/stop`, and `/next` for tester sessions and first-in, first-out testing.
-- Protection against duplicate active tests and competing reservations for the same player.
-- Regional evaluation tickets named `test-username-region`.
-- `/passeval` records LT3, moves the ticket into HT3 testing, and renames it.
-- Passing evaluation prevents the ticket from being skipped afterward.
-- Existing HT3, LT2, HT2, and LT1 players request their next high-tier test directly.
-- Configurable queue capacity and separate normal/high-test cooldowns.
+**Accounts and queues**
+- Players enter their IGN, region and preferred server. The bot checks the Minecraft account and links it to their Discord. The same Minecraft account can’t be linked to two people at once.
+- Verification gives them their region role. Entering the waitlist gives them the separate waitlist role and access to their regional queue.
+- NA, EU and AS each have their own queue, with positions, available testers and alerts when someone joins.
+- Testers use `/start`, `/stop` and `/next`. The person waiting longest gets taken next, and two testers can’t take the same person.
+- Players can leave the queue themselves. Queue size and normal/high-test cooldowns are configurable.
+- Evaluation tickets open as `test-username-region`. `/passeval` gives LT3 and moves the ticket into HT3 testing with the new name. It can’t be skipped after that.
+- Players who already have HT3, LT2, HT2 or LT1 go straight to a ticket for their next tier.
+- `/profile` shows a player’s saved details. Clicking Verify again shows the account they already linked.
+- If someone linked the wrong account or lost access to it, a Bot Admin can use `/unverify`. Their Discord rank and cooldown stay saved when they link a replacement.
 
-*Account lookup confirms an account exists; it does not prove Minecraft account ownership.*
+The username check confirms the Minecraft account exists; it doesn’t prove the person owns it.
 
 ---
 
-**Results, Lists, and Testing Tools (2/5)**
+**Results and testing tools (2/5)**
 
-**Results and ranks**
-- `/close` finishes a test with an earned tier or Test Discontinued.
-- Result embeds include the player, tester, region, username, original rank, and earned rank.
-- Previous Rank is captured when the ticket opens, before any interim evaluation rank.
-- Result messages receive the six reactions: 👑 🥳 😱 😭 😂 💀.
-- Rank roles update after results; eligible completed tests credit the original tester once.
-- Discontinuing a test restores its opening rank without counting it as a completed test.
-- `/format` posts Markdown fight-result templates.
+**Finishing tests**
+- `/close` records the result and updates the player’s rank roles. The result embed shows the player, tester, region, IGN, previous rank and earned rank.
+- Previous rank means the rank they had when the ticket opened, even if they got LT3 during evaluation.
+- Results get the reactions 👑 🥳 😱 😭 😂 💀.
+- The original tester gets credit once for a completed test. Test Discontinued puts the player back at their opening rank and doesn’t count as a completed test.
+- `/format` posts the fight-result template in the ticket.
 
-**High-tier lists**
-- Maintained HT3, LT2, HT2, LT1, and HT1 list embeds, separated by region.
-- LT2 and higher membership updates automatically for eligible linked players; HT3 entry is manual.
-- List Admin commands manage regional membership; Staff can view the lists.
-- Large lists and queues paginate, and obsolete extra pages are removed.
-
-**Staff testing tools**
-- Mention the player and assigned tester when a testing ticket opens.
-- `/add` grants ticket access and mentions the added person; `/remove` manages added participants.
-- `/rename` changes a ticket's channel name.
-- `/addht3` and `/addlt2` select eligible regional opponents.
-- `/set-ticket` registers an existing channel, and `/changeticket` changes permitted ticket routes.
-- `/uuid` looks up an IGN's Minecraft UUID.
-- `/stats`, `/testerstats`, and `/testerlb` provide counts, quota statistics, and leaderboards.
-- Optional monthly tester quotas and monthly quota reports.
+**Lists and staff tools**
+- HT3, LT2, HT2, LT1 and HT1 each have a list split by region. LT2 and above update automatically for eligible linked players; HT3 is added manually.
+- Staff can view the lists, and List Admins can add or remove people. Long lists and queues split into pages, with old extra pages cleared when they shrink.
+- Opening a testing ticket pings the player and assigned tester. `/add` gives someone access and pings them, including when assigning a tester to an unassigned high test.
+- `/remove` removes added participants, and `/rename` changes the ticket name.
+- `/addht3` and `/addlt2` let staff pick an eligible opponent from the regional list.
+- `/set-ticket` lets staff register an existing channel as a ticket. `/changeticket` changes its route where allowed.
+- `/uuid` looks up a Minecraft UUID from an IGN.
+- `/stats`, `/testerstats` and `/testerlb` show tester counts, quota progress and leaderboards. Monthly quotas and reports can be turned on if wanted.
 
 ---
 
-**Support, Restrictions, and Evidence (3/5)**
+**Support tickets and moderation (3/5)**
 
-**Support tickets in the same bot**
-- General Support, Player Reports, Staff Reports, Restriction Appeals, and Partnership Requests.
-- Configurable custom ticket types, opening messages, responsible teams, and close permissions.
-- Private ticket access, opening mentions, and pinned support opening messages.
-- Type-specific access remains in place when tickets use overflow categories.
-- Automatic overflow-category handling when the normal category fills.
+**Support tickets**
+The bot also handles General Support, Player Reports, Staff Reports, Restriction Appeals and Partnership Requests. More ticket types can be configured, along with their opening messages, staff access, pings and who can close them.
 
-**Restrictions and regulator tools**
-- `/restrict` applies a Discord/Minecraft account-pair restriction, with an optional duration.
-- Restricted accounts are blocked from testing and removed from queues and high-tier lists.
-- `/unrestrict` removes a restriction; expiry does not automatically restore list membership.
-- `/deadline set` accepts 1 minute through 14 days, including values such as `3h` and `2d`.
-- Deadlines notify the person who set them for review; they do not automatically close tickets.
-- `/deadline clear` cancels a deadline.
-- Authorized commands can force a test, stop a regional queue, assign a result, or migrate an individual rank.
+- Support opening messages are pinned, and the opener and responsible team are pinged.
+- Tickets stay private to the people and teams meant to see them.
+- If a category fills up, the bot uses overflow categories while keeping the ticket’s access rules.
 
-**Transcripts and evidence**
-- Ticket closure queues a Markdown transcript and required image evidence before channel deletion.
-- Failed required archival keeps the original channel available for staff review.
-- Report/appeal image copying is configurable, with a default ten-day image retention period.
-- Video files are not copied; attachment and YouTube links remain in transcripts.
-- Saved work retries after failures or restarts; transcripts do not automatically expire.
+**Restrictions and deadlines**
+- `/restrict` restricts a Discord/Minecraft account pair, blocks testing and removes them from queues and high-tier lists. Restrictions can have a duration or stay until removed.
+- `/unrestrict` removes the restriction. List membership isn’t automatically restored when a restriction ends.
+- Regulators can set a ticket deadline with `/deadline set`, from `1m` to `14d`, including things like `3h` or `2d`.
+- When time runs out, the person who set it gets pinged to review the ticket. It doesn’t close on its own. `/deadline clear` removes it.
+- There are also permission-controlled commands to force a test, stop a regional queue, assign a result or migrate an individual rank.
+
+**Keeping ticket records**
+Before deleting a closed ticket, the bot saves its transcript and any required image evidence. If that fails, it keeps the channel and retries.
+
+Image saving is configurable for reports and appeals, with ten days as the default retention. Videos aren’t downloaded, but attachment and YouTube links stay in the transcript. Transcripts don’t automatically expire, and unfinished background work can resume after a restart.
 
 ---
 
-**Staff Leave of Absence (4/5)**
+**Staff LOAs (4/5)**
 
-**Requesting leave**
-- A branded Staff Leave Portal with a Request Leave of Absence button.
-- An automatically updated Members on LOA roster showing return dates.
-- Staff enter a username, a whole-day duration from `1d` to `30d`, and a reason.
-- One pending or active request per Discord member.
-- Requesters can withdraw their own pending request.
+There’s a leave-of-absence system too, with an LOA role and a separate LOA Admin role.
 
-**Review and approval**
-- Two roles: LOA and LOA Admin.
-- Three channels: Request LOA, LOA In Progress, and Accepted LOA.
-- New requests ping LOA Admins in the private review channel.
-- LOA Admins and Owners can accept or deny; denial requires a reason.
-- Approved requests appear in Accepted LOA and grant the LOA role.
-- Leave starts when approved and runs for the approved duration.
-- Approval, denial, expiry, and early return send a DM; blocked DMs are recorded privately.
+**Requesting and reviewing leave**
+- Staff click the button in Request LOA and enter their username, how long they’ll be away (`1d`–`30d`) and their reason.
+- The request goes to LOA In Progress and pings LOA Admins. Only LOA Admins and Owners can accept or deny it, and denying it requires a reason.
+- Accepted requests go into Accepted LOA. The person gets the LOA role, with their leave starting when it’s approved.
+- They get a DM for approval, denial, expiry and early return. If their DMs are blocked, that’s recorded privately without undoing the decision.
+- The request panel also has an updated list of everyone on approved LOA and when they’re due back.
 
-**Return and quota rules**
-- Automatic LOA role removal at expiry, including recovery after a restart.
-- Requesters can use End My LOA; LOA Admins can end leave with a reason.
-- `/loa status` shows the relevant saved leave status and personal controls.
-- Other Staff cannot use status lookup to read someone else's pending/denied reasons.
-- Any approved leave overlapping a month exempts that tester from that month's quota.
-- LOA does not stop active tester sessions or prevent `/start`.
-- Completed tests and leaderboard counts continue normally.
-- Active leave is restored on rejoin; expired leave is not.
-- Disabling new requests does not stop existing leave from expiring.
+**Returning and quotas**
+- The role is removed when leave expires. Saved leave still expires after a restart or if new requests are disabled.
+- People can withdraw a pending request or use End My LOA if they return early. LOA Admins can also end leave with a reason.
+- `/loa status` shows their saved leave and the relevant controls. Other staff can’t use it to read someone else’s pending or denied reasons.
+- Any approved LOA that overlaps a month makes that tester exempt from that month’s quota. If they return early, it uses the time they actually spent on leave.
+- They can still use `/start` and test while on LOA. Their completed tests and leaderboard counts still count normally.
+- Rejoining while leave is active restores the role; rejoining after it expired doesn’t.
+
+Only one pending or active request is allowed per person.
 
 ---
 
-**Administration and Rollout (5/5)**
+**Setup and switching over (5/5)**
 
-**Management features**
-- A private Discord setup wizard for community settings, enabled features, regions, cooldowns, quotas, and resource mappings.
-- Reuse existing roles/channels/categories or create missing resources after reviewing a preview.
-- Configurable community branding, embed colors, and messages.
-- Separate permission groups for Owners, Bot Admins, Staff, Testers, Regulators, List Admins, Restriction Keys, LOA Admins, and support teams.
-- Tester assignment, individual cooldown changes, maintenance mode, and reviewed bulk management commands.
-- Private `/health` checks for bot status, pending work, backups, and configuration problems.
-- Daily backups, reviewed restore/transfer tools, and recovery safeguards.
-- Staff action logging and private operational/review channels.
+**For the people managing the bot**
+- There’s a private Discord setup wizard for the features, regions, cooldowns, quotas and role/channel settings. It can use existing resources or create missing ones after a preview.
+- The server name, colors and messages can be changed to fit the community.
+- Permissions are split between Owners, Bot Admins, Staff, Testers, Regulators, List Admins, Restriction Keys, LOA Admins and the different support teams.
+- Admin tools cover assigning testers, changing cooldowns, maintenance mode and bulk actions with confirmation prompts.
+- `/health` shows bot status, pending work, backups and configuration issues to authorized admins.
+- There are daily backups, restore/transfer tools, staff action logs and private channels for problems that need review.
 
-**Moving from existing bots**
-- An optional importer can preserve ranks, account associations, supported testing history, list memberships, and existing ticket channels from a compatible export.
-- Missing or conflicting import information is held for review rather than guessed.
-- Migration requires the old data to be exported and prepared correctly; a tier reset should not be needed when the required records are available.
+**Moving the existing data**
+The migration tools can keep ranks, linked accounts, supported testing history, lists and existing ticket channels, provided we get a compatible export from the current bot. Anything missing or conflicting gets held for review.
 
-**Current status**
-Version 0.2.0 is built and has 61 passing automated tests, plus Windows/Linux installation checks. Live Discord and real remote-database rehearsal are still required before replacing the current bots.
+We’ll need the old data exported and prepared properly before moving it. There shouldn’t need to be a tier reset if the required records are available.
 
-*Features and commands depend on the modules enabled and the permissions assigned to your role.*
+**Where things stand**
+The current build is v0.2.0, with 61 automated tests passing and installation checks passed on Windows and Linux. It still needs a proper run-through in a test Discord server and with the chosen remote database before we replace the current bots.
+
+Which commands each person can use will depend on their assigned roles and which features we enable.
