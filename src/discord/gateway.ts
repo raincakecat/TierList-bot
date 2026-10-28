@@ -102,12 +102,13 @@ export class Gateway {
   private async notice(j:Job,t:Ticket|undefined,save:(k:string,v:unknown)=>Promise<void>){
     if(t?.status==='closed'||(t?.status==='closing'&&['access','rename','passeval','type','close-request'].includes(String(j.data.event))))return;const ch=await this.text(t?.channelId??String(j.data.channelId));
     if(j.data.event==='delete-transient'){try{await ch.messages.delete(String(j.data.messageId));}catch(error){if((error as {code?:number}).code!==10008)throw error;}return;}
-    if(j.data.here){
+    if(j.data.queueOpening||j.data.here){
       const s=await this.store.read(false),region=j.data.region as typeof REGIONS[number];
       if(j.checkpoints.pingRegistered||s.jobs[`delete-${j.id}`])return;
       const sessionAt=Number(j.data.sessionAt??s.lastTestingSession?.[region]??0);
       if(!REGIONS.includes(region)||!this.config.modules.testing||!this.config.regions[region].enabled||s.maintenance||!Object.values(s.testers).includes(region)||(s.lastTestingSession?.[region]??0)!==sessionAt)return;
-      const message=await this.sendOnce(ch,j,{content:'@here',allowedMentions:{parse:['everyone']}},save);
+      const role=this.config.regions[region].waitlistRoleId;if(!role)throw new Error('Regional waitlist role is not configured');
+      const message=await this.sendOnce(ch,j,{content:`<@&${role}>`,allowedMentions:{parse:[],roles:[role]}},save);
       await this.store.change(s=>{s.panels[`queue-ping:${region}:${sessionAt}:${ch.id}:${j.id}`]=message.id;});
       await save('pingRegistered',true);
       await this.store.change(s=>{enqueue(s,'queues',{},Date.now());});return;
@@ -127,7 +128,7 @@ export class Gateway {
       if(j.data.event==='passeval'){await ch.setParent(await this.destination(t.categoryId),{lockPermissions:false});await ch.setName(t.name);}
       if(j.data.event==='type'){for(const role of (j.data.previousRoles as string[]))if(!t.accessRoles.includes(role))await ch.permissionOverwrites.delete(role).catch(error=>{if((error as {code:number}).code!==10009)throw error;});for(const role of t.accessRoles)await ch.permissionOverwrites.edit(role,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true},{type:0});await ch.setParent(await this.destination(t.categoryId),{lockPermissions:false});const kind=this.config.supportTicketTypes.find(k=>k.key===t.type);const roles=(this.config.ticketNotifications.supportRoleIds??rolesFor(this.config,kind?.openingPingGroups??[]));if(roles.length){const sub:Job={...j,id:`${j.id}-type-ping`,checkpoints:{...j.checkpoints,messageId:j.checkpoints.typePingMessageId}};await this.sendOnce(ch,sub,{content:roles.map(id=>`<@&${id}>`).join(' '),allowedMentions:{parse:[],roles}},async(k,v)=>{if(k==='messageId')await save('typePingMessageId',v);});}}
     }
-    await this.sendOnce(ch,j,{content:String(j.data.content),allowedMentions:j.data.here?{parse:['everyone']}:{parse:[],users:(j.data.mentions as string[]|undefined)??[]}},save);
+    await this.sendOnce(ch,j,{content:String(j.data.content),allowedMentions:{parse:[],users:(j.data.mentions as string[]|undefined)??[]}},save);
     if(j.data.event==='passeval'&&!j.checkpoints.template){const sub:Job={...j,id:j.id+'-template',checkpoints:{messageId:j.checkpoints.templateMessageId}};await this.sendOnce(ch,sub,{content:this.fightTemplate(t!,'HT3'),allowedMentions:{parse:[]}},async(k,v)=>{if(k==='messageId')await save('templateMessageId',v);});await save('template',true);}
   }
   fightTemplate(t:Ticket,tier:Tier):string {

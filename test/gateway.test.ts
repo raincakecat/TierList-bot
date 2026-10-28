@@ -82,23 +82,29 @@ test('interrupted clean deliveries recover from recent payloads without posting 
 }finally{await rm(f.dir,{recursive:true});}});
 
 test('queue opening ping stays while testers are active, survives restart, and is deleted when the queue closes',async()=>{const f=await setup();try{
- f.c.modules.testing=true;f.c.regions.EU.enabled=false;f.c.regions.AS.enabled=false;f.c.regions.NA.queueChannelId=SOURCE;
+ f.c.modules.testing=true;f.c.regions.EU.enabled=false;f.c.regions.AS.enabled=false;f.c.regions.NA.queueChannelId=SOURCE;f.c.regions.NA.waitlistRoleId=USER;
  await f.store.change(s=>{s.testers[BOT]='NA';s.lastTestingSession={NA:1234};});const j=job('notice',f.t);j.data={here:true,region:'NA',sessionAt:1234,channelId:SOURCE};const save=async(k:string,v:unknown)=>{j.checkpoints[k]=v;};
- await f.gateway.job(j,save);const pingId=f.source.messages.first()!.id;assert.equal(f.source.sent[0]!.content,'@here');assert.equal(f.source.sent[0]!.embeds,undefined);assert.deepEqual(f.source.sent[0]!.allowedMentions,{parse:['everyone']});assert.equal((await f.store.read()).jobs[`delete-${j.id}`],undefined);
- await f.gateway.queues();assert(f.source.messages.has(pingId));await f.gateway.job(j,save);assert.equal(f.source.sent.filter(p=>p.content==='@here').length,1);
+ await f.gateway.job(j,save);const pingId=f.source.messages.first()!.id;assert.equal(f.source.sent[0]!.content,`<@&${USER}>`);assert.equal(f.source.sent[0]!.embeds,undefined);assert.deepEqual(f.source.sent[0]!.allowedMentions,{parse:[],roles:[USER]});assert.equal((await f.store.read()).jobs[`delete-${j.id}`],undefined);
+ await f.gateway.queues();assert(f.source.messages.has(pingId));await f.gateway.job(j,save);assert.equal(f.source.sent.filter(p=>p.content===`<@&${USER}>`).length,1);
  const restarted=new Gateway(f.client,f.store,()=>f.c);await f.store.change(s=>{s.testers[USER]='NA';delete s.testers[BOT];});await restarted.queues();assert(f.source.messages.has(pingId));
- await f.store.change(s=>{s.testers={};});await restarted.queues();assert(!f.source.messages.has(pingId));assert(!Object.keys((await f.store.read()).panels).some(k=>k.startsWith('queue-ping:')));await f.gateway.job(j,save);assert.equal(f.source.sent.filter(p=>p.content==='@here').length,1);
+ await f.store.change(s=>{s.testers={};});await restarted.queues();assert(!f.source.messages.has(pingId));assert(!Object.keys((await f.store.read()).panels).some(k=>k.startsWith('queue-ping:')));await f.gateway.job(j,save);assert.equal(f.source.sent.filter(p=>p.content===`<@&${USER}>`).length,1);
 }finally{await rm(f.dir,{recursive:true});}});
 
 test('reopening a queue removes its old ping and stale queued notifications do not ping a new session',async()=>{const f=await setup();try{
- f.c.modules.testing=true;f.c.regions.EU.enabled=false;f.c.regions.AS.enabled=false;f.c.regions.NA.queueChannelId=SOURCE;
+ f.c.modules.testing=true;f.c.regions.EU.enabled=false;f.c.regions.AS.enabled=false;f.c.regions.NA.queueChannelId=SOURCE;f.c.regions.NA.waitlistRoleId=USER;
  await f.store.change(s=>{s.testers[BOT]='NA';s.lastTestingSession={NA:100};});const j=job('notice',f.t);j.data={here:true,region:'NA',sessionAt:100,channelId:SOURCE};await f.gateway.job(j,async(k,v)=>{j.checkpoints[k]=v;});const old=f.source.messages.first()!.id;
  await f.store.change(s=>{s.lastTestingSession!.NA=200;});await f.gateway.queues();assert(!f.source.messages.has(old));
- const stale={...j,id:'stale',checkpoints:{}};await f.gateway.job(stale,async()=>{});assert.equal(f.source.sent.filter(p=>p.content==='@here').length,1);
- const fresh={...j,id:'fresh',data:{...j.data,sessionAt:200},checkpoints:{}};await f.gateway.job(fresh,async()=>{});assert.equal(f.source.sent.filter(p=>p.content==='@here').length,2);
+ const stale={...j,id:'stale',checkpoints:{}};await f.gateway.job(stale,async()=>{});assert.equal(f.source.sent.filter(p=>p.content===`<@&${USER}>`).length,1);
+ const fresh={...j,id:'fresh',data:{...j.data,sessionAt:200},checkpoints:{}};await f.gateway.job(fresh,async()=>{});assert.equal(f.source.sent.filter(p=>p.content===`<@&${USER}>`).length,2);
  await f.store.change(s=>{s.maintenance=true;});await f.gateway.queues();assert(!Object.keys((await f.store.read()).panels).some(k=>k.startsWith('queue-ping:')));
 }finally{await rm(f.dir,{recursive:true});}});
 
+
+test('queue notifications allow only the configured regional waitlist role for all three regions',async()=>{for(const [n,region]of (['NA','EU','AS'] as const).entries()){const f=await setup();try{
+ f.c.modules.testing=true;const role=String(400000000000000000n+BigInt(n));f.c.regions[region].waitlistRoleId=role;
+ await f.store.change(s=>{s.testers[BOT]=region;s.lastTestingSession={[region]:123};});const j=job('notice',f.t);j.data={queueOpening:true,region,sessionAt:123,channelId:SOURCE};await f.gateway.job(j,async(k,v)=>{j.checkpoints[k]=v;});
+ assert.equal(f.source.sent[0]!.content,`<@&${role}>`);assert.deepEqual(f.source.sent[0]!.allowedMentions,{parse:[],roles:[role]});assert(!f.source.sent[0]!.content!.includes('@here'));
+}finally{await rm(f.dir,{recursive:true});}}});
 
 test('evaluation and high testing channel names use server nicknames rather than Minecraft IGNs',()=>{const t={opener:USER,region:'NA' as const,target:null};assert.equal(testingTicketName(t,'Server Nickname'),'test-server-nickname-na');assert.equal(testingTicketName({...t,target:'LT2'},'Server Nickname'),'server-nickname-lt2-na');});
 

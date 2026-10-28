@@ -7,7 +7,7 @@ This package contains a configurable Discord bot for Crystal PvP account linking
 
 The full-package ZIP includes compiled JavaScript, TypeScript source, automated tests, pinned dependencies, configuration templates, SQL setup, launchers, and this guide. Node.js and downloaded dependencies are not bundled. Internet access is needed for installation and normal operation.
 
-Release status: 168 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite, and Supabase has been exercised live. This reusable package remains an implementation candidate: validate your own server permissions, hosting, remote database, and recovery flow in rehearsal. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
+Release status: 169 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite, and Supabase has been exercised live. This reusable package remains an implementation candidate: validate your own server permissions, hosting, remote database, and recovery flow in rehearsal. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
 
 Read the quick start for the shortest installation route. The later sections explain configuration, permissions, hosting, recovery, migration, and troubleshooting. Commands shown in this guide must be entered in the specified place: host terminal commands on the machine running the bot, and slash commands inside your Discord server.
 
@@ -489,7 +489,7 @@ For exact local behavior, consult src/config.ts, src/domain/service.ts, src/disc
 ---PAGE---
 # 16. October 28 updates and operations notes
 
-Queue notifications: the first tester opening a regional queue posts one plain @here message in its waitlist channel. It remains until the last tester stops, staff closes the queue, or testing is paused/disabled. The saved reference survives restart. Additional testers joining an already-open region do not send another ping.
+Queue notifications: the first tester opening a regional queue posts one regional waitlist-role mention in its waitlist channel. It remains until the last tester stops, staff closes the queue, or testing is paused/disabled. The saved reference survives restart. Additional testers joining an already-open region do not send another ping.
 
 Ticket names use Discord account usernames rather than server nicknames. Ticket creation confirmations include a channel link once creation finishes. /maketestticket member tester registers an existing channel as a testing ticket; it requires Staff access and an eligible tester.
 

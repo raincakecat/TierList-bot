@@ -6,7 +6,7 @@ Version 0.2.0 adds staff Leave of Absence requests, approval controls, timed rol
 
 **Full package:** [Download the ZIP with compiled files and PDF setup guide](full-package/full-package.zip), or [read the PDF guide](docs/Full-Setup-Guide.pdf).
 
-**Status:** 168 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite; Supabase has also been exercised live. This reusable package remains an implementation candidate: rehearse your own roles, channels, database, and recovery procedures before cutover. See `docs/STATUS.md`.
+**Status:** 169 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite; Supabase has also been exercised live. This reusable package remains an implementation candidate: rehearse your own roles, channels, database, and recovery procedures before cutover. See `docs/STATUS.md`.
 
 ## Install the ready-to-run ZIP
 
@@ -99,7 +99,7 @@ Runtime conventions follow the [discord.js documentation](https://discord.js.org
 
 ## Recent updates
 
-- Opening a regional queue posts one plain `@here` in the waitlist channel. It stays until that queue closes; joining additional testers does not send another ping.
+- Opening a regional queue posts one plain regional waitlist-role mention in the waitlist channel. It stays until that queue closes; joining additional testers does not send another ping.
 - Ticket names use Discord account usernames. Creation confirmations include a channel link.
 - `/requestclose reason timeout` lets the opener accept or deny; pending requests close automatically after 1h–7d. `/forceclose reason` is for responsible support staff and still requires archival.
 - `/maketestticket member tester` registers an existing channel as a test ticket.

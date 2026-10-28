@@ -10,4 +10,4 @@ Local credentials, live configuration, databases, and evidence are excluded. Thi
 
 To rebuild from source: run `npm ci`, `npm test`, optionally regenerate the PDF with `python scripts/build-setup-guide.py` (requires ReportLab), then `node scripts/full-package.mjs`. An optional output directory argument copies the ZIP and PDF there.
 
-October 28 update: includes the queue-ping lifecycle, cooldown reset role, ticket closure requests, channel links, multipart archives and remote-state optimizations. All 168 tests pass. See [update notes](../docs/UPDATES-2026-10-28.md).
+October 28 update: includes the queue-ping lifecycle, cooldown reset role, ticket closure requests, channel links, multipart archives and remote-state optimizations. All 169 tests pass. See [update notes](../docs/UPDATES-2026-10-28.md).
