@@ -3,16 +3,20 @@ import { readFile, writeFile, rename } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, MessageFlags, ModalBuilder, PermissionFlagsBits, REST, Routes, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, type Client, type GuildMember, type Interaction } from 'discord.js';
 import { ConfigFile, milliseconds, readiness } from '../config.js';
-import { Service, currentTicket, enqueue, player, removeQueue, restricted, syncLists, tierName } from '../domain/service.js';
+import { Service, currentTicket, enqueue, listTiers, player, removeQueue, restricted, syncLists, tierName } from '../domain/service.js';
 import { dateKey, periodStart, previousMonth } from '../domain/calendar.js';
 import { allowed, requireGroup } from '../domain/permissions.js';
 import { TIERS, UserError, type Actor, type Tier } from '../domain/types.js';
 import { Store, openStore } from '../storage/store.js';
 import { Backups, decodeBackup } from '../storage/backups.js';
 import { Worker } from '../storage/jobs.js';
+import { LeaseWatch } from '../storage/lease-watch.js';
+import { allTimeTests } from '../storage/legacy-statistics.js';
 import { applyMigration, migrationSchema, previewMigration, type Preview } from '../storage/migration.js';
 import { lookupMinecraft } from '../minecraft.js';
 import { commandDefinitions } from './commands.js';
+import { TicketLinks } from './ticket-links.js';
+import { paginateLines } from './pages.js';
 import { Gateway } from './gateway.js';
 import { provision, setupPreview, validateDiscord } from './setup.js';
 import { WizardSessions, requireWizard, wizardPolicy, wizardView, wizardModal } from './wizard.js';
@@ -28,61 +32,101 @@ export class Runtime {
   private worker:Worker;
   private pending=new Map<string,Pending>();
   private timers:NodeJS.Timeout[]=[];
+  private leaseTimers:NodeJS.Timeout[]=[];
+  private leaseWatch?:LeaseWatch;
   private running=false;
+  private leaseFailed=false;
   private lease=randomUUID();
   private busy=false;
+  private jobsBusy=false;
+  private jobTasks=new Set<Promise<boolean>>();
   private lastRefresh=0;
+  private lastListCheck=0;
   private setupErrors:string[]=[];
   private editingImports=new Set<string>();
   private wizard=new WizardSessions();
   private leave:LeaveService;
   private startedAt=Date.now();
-  constructor(private client:Client,private file:ConfigFile,private store:Store){
+  private ticketLinks=new TicketLinks();
+  constructor(private client:Client,private file:ConfigFile,private store:Store,private exitOnLeaseFailure:(code:number)=>void=code=>process.exit(code)){
     this.leave=new LeaveService(store,()=>file.value);
-    this.service=new Service(store,()=>file.value);this.gateway=new Gateway(client,store,()=>file.value);
-    this.worker=new Worker(store,(job,save)=>this.gateway.job(job,save),j=>this.gateway.failure(j));
+    this.service=new Service(store,()=>file.value);this.gateway=new Gateway(client,store,()=>file.value,(id,channel)=>this.ticketLinks.ready(id,channel));
+    this.worker=new Worker(store,(job,save)=>this.gateway.job(job,save),j=>this.gateway.failure(j),3);
   }
   async ready(){
-    const now=Date.now();await this.store.change(s=>{if(s.runtimeLease&&s.runtimeLease.until>now)throw new Error('Another bot instance is already using this database.');s.runtimeLease={owner:this.lease,until:now+60_000};s.testers={};});
+    const now=Date.now();await this.store.acquireLease(this.lease,now+60_000);
+    this.leaseWatch=new LeaseWatch(now+60_000,until=>this.store.renewLease(this.lease,until),()=>this.failLease());
+    this.leaseTimers.push(setInterval(()=>void this.renew(),15_000),setInterval(()=>this.leaseWatch?.check(),1000));
+    await this.store.change(s=>{if(this.file.value.database.backend==='supabase')delete s.runtimeLease;if((s.sessionResumeUntil??0)<now)s.testers={};delete s.sessionResumeUntil;});
     const guild=await this.gateway.guild();await guild.members.fetchMe();
     await new REST({version:'10'}).setToken(process.env.DISCORD_TOKEN!).put(Routes.applicationGuildCommands(this.client.user!.id,guild.id),{body:commandDefinitions()});
     const errors=await validateDiscord(this.file.value,guild);
     this.setupErrors=errors;
     if(errors.length)console.log(`Setup needs ${errors.length} settings or permission corrections. Use /setup preview or /config validate.`);
     this.running=true;this.timers.push(setInterval(()=>void this.loop().catch(()=>console.error('Background cycle failed; saved work will retry.')),2000));
-    this.timers.push(setInterval(()=>void this.renew().catch(()=>{this.running=false;console.error('Database lease unavailable; stopping Discord connection.');this.client.destroy();}),15_000));
+    this.timers.push(setInterval(()=>void this.runJobs().catch(()=>console.error('Saved work will retry.')),500));
     this.client.on('interactionCreate',i=>void this.interact(i));
-    this.client.on('guildMemberRemove',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.store.change(s=>{s.departures??=[];if(!s.departures.includes(m.id))s.departures.push(m.id);removeQueue(s,m.id);enqueue(s,'queues',{},Date.now());}).catch(()=>console.error('Member departure could not be recorded.'));});
+    this.client.on('guildMemberRemove',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.service.departed(m.id).then(()=>this.runJobs()).catch(()=>console.error('Member departure could not be recorded.'));});
     this.client.on('guildMemberAdd',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.store.operations.shared(async()=>{const s=await this.store.read();if(s.players[m.id])await this.gateway.playerRoles(s.players[m.id]!);await new LeaveGateway(this.client,this.store,()=>this.file.value,this.gateway).syncRole(m.id);}).catch(()=>console.error('Member role restoration needs review.'));});
     this.client.on('guildMemberUpdate',(old,m)=>{if(m.guild.id!==this.file.value.community.guildId||this.gateway.synchronizingRoles.has(m.id))return;const configured=Object.values(this.file.value.tierRoleIds).filter(Boolean);if(configured.some(id=>old.roles.cache.has(id!)!==m.roles.cache.has(id!))||this.file.value.permissionGroups.verifiedTester.some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id))||this.file.value.permissionGroups.staff.some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id)))void this.reconcileMember(m.id).catch(()=>console.error('Member role reconciliation needs review.'));});
     console.log('Crystal bot connected.');
   }
-  private async renew(){await this.store.renewLease(this.lease,Date.now()+60_000);}
+  private async runJobs(){
+    if(!this.running||this.jobsBusy||this.store.operations.recovering)return;this.jobsBusy=true;
+    try{await this.store.operations.independent(async()=>{
+      const s=await this.store.read(false);if(!Object.values(s.jobs).some(j=>j.status!=='done'&&j.nextAt<=Date.now()&&(j.status!=='working'||(j.leaseUntil??0)<Date.now())))return;
+      while(this.running&&this.jobTasks.size<3&&!this.store.operations.recovering){
+        const task=this.store.operations.independent(()=>this.worker.runOnce());this.jobTasks.add(task);
+        void task.then(worked=>{this.jobTasks.delete(task);if(worked)void this.runJobs().catch(()=>console.error('Saved work will retry.'));},()=>{this.jobTasks.delete(task);console.error('Saved work will retry.');});
+      }
+    });}finally{this.jobsBusy=false;}
+  }
+  private async renew(){await this.leaseWatch?.pulse();}
+  private failLease(){
+    if(this.leaseFailed)return;this.leaseFailed=true;this.running=false;
+    for(const timer of this.timers)clearInterval(timer);
+    for(const timer of this.leaseTimers)clearInterval(timer);
+    console.error('Database lease unavailable; disconnecting and exiting for automatic restart.');
+    // Do not release a lease we can no longer prove we own. The next process
+    // must acquire it normally before doing any Discord work.
+    try{this.client.destroy();}finally{this.exitOnLeaseFailure(1);}
+  }
   private async loop(){if(this.store.operations.recovering)return;return this.store.operations.shared(()=>this.cycle());}
   private async cycle(){if(!this.running||this.busy)return;this.busy=true;try{
-    await this.service.tick();await this.leave.tick();await this.worker.runOnce();const now=Date.now(),s=await this.store.read();
+    await this.service.tick();await this.leave.tick();const now=Date.now(),s=await this.store.read(false);
     if(s.initialized&&!readiness(this.file.value).length&&now-this.lastRefresh>60_000){await this.gateway.queues();this.lastRefresh=now;}
+    if(s.initialized&&this.file.value.modules.tierLists&&now-this.lastListCheck>15*60_000){await this.store.change(state=>enqueue(state,'lists',{},now));this.lastListCheck=now;}
     if(now-(s.lastAutomaticBackupAt??0)>86_400_000){await new Backups(this.store,this.file.value.backups.directory).create(true);await this.store.change(s=>s.lastAutomaticBackupAt=now);await this.gateway.cleanupImages();}
     const channelId=this.file.value.channels.staffActionLog;if(channelId)await this.store.change(state=>{for(const e of state.audit)if(!state.jobs[`audit-${e.id}`])enqueue(state,'notice',{channelId,content:`${new Date(e.at).toISOString()} | ${e.actor} | ${e.action} | ${e.target}`},now,`audit-${e.id}`);});
-    if(this.file.value.modules.testerQuotas&&s.initialized){const month=previousMonth(now,this.file.value.community.timezone),jobId=`quota-${month}`;if(!s.jobs[jobId])await this.store.change(state=>{const rows=Object.values(state.players).filter(p=>p.testerSince&&dateKey(p.testerSince,this.file.value.community.timezone).slice(0,7)<month).map(p=>{const count=state.completions.filter(e=>e.tester===p.id&&dateKey(e.at,this.file.value.community.timezone).slice(0,7)===month).length;return `<@${p.id}>: ${count} / ${quotaExempt(state,p.id,month,this.file.value.community.timezone,now)?'LOA exempt':this.file.value.testing.monthlyTesterQuota}`;});enqueue(state,'notice',{channelId:this.file.value.channels.quotaReports,content:`Monthly tester quota report: ${month}\n${rows.join('\n')||'No eligible testers this period.'}`},now,jobId);});}
+    if(this.file.value.modules.testerQuotas&&s.initialized){const month=previousMonth(now,this.file.value.community.timezone),jobId=`quota-${month}`;if(!s.jobs[jobId])await this.store.change(state=>{const rows=Object.values(state.players).filter(p=>p.testerSince&&dateKey(p.testerSince,this.file.value.community.timezone).slice(0,7)<month).map(p=>{const count=state.completions.filter(e=>e.tester===p.id&&dateKey(e.at,this.file.value.community.timezone).slice(0,7)===month).length;return `<@${p.id}>: ${count} / ${quotaExempt(state,p.id,month,this.file.value.community.timezone,now)?'LOA exempt':this.file.value.testing.monthlyTesterQuota}`;});const pages=paginateLines(rows.length?rows:['No eligible testers this period.'],1800);for(let page=0;page<pages.length;page++)enqueue(state,'notice',{channelId:this.file.value.channels.quotaReports,content:`Monthly tester quota report: ${month}${pages.length>1?` (${page+1}/${pages.length})`:''}\n${pages[page]}`},now,page?`${jobId}-${page}`:jobId);});}
     if(!s.maintenance)for(const id of s.departures??[]){const tickets=Object.values(s.tickets).filter(t=>t.opener===id&&t.status==='open');const internal:Actor={id:'system',roles:this.file.value.permissionGroups.owner,administrator:false,channelAccess:true};for(const t of tickets)await this.service.close(internal,t.id,'discontinued','Member left the server');await this.store.change(state=>{if(!Object.values(state.tickets).some(t=>t.opener===id&&t.status==='opening'))state.departures=(state.departures??[]).filter(x=>x!==id);});}
     for(const [id,p]of this.pending)if(p.expires<now)this.pending.delete(id);
   }finally{this.busy=false;}}
-  async stop(){this.running=false;for(const t of this.timers)clearInterval(t);while(this.busy)await new Promise(resolve=>setTimeout(resolve,50));await this.store.change(s=>{if(s.runtimeLease?.owner===this.lease)delete s.runtimeLease;});this.client.destroy();await this.store.close();}
+  async stop(){this.running=false;for(const t of this.timers)clearInterval(t);while(this.busy||this.jobsBusy||this.jobTasks.size)await new Promise(resolve=>setTimeout(resolve,50));for(const t of this.leaseTimers)clearInterval(t);await this.leaseWatch?.stop();if(this.leaseWatch&&(await this.store.read()).runtimeLease?.owner===this.lease){await this.store.change(s=>{s.sessionResumeUntil=Date.now()+120_000;});await this.store.releaseLease(this.lease);}this.client.destroy();await this.store.close();}
   private async reconcileMember(id:string){return this.store.operations.shared(()=>this.reconcileMemberNow(id));}
   private async reconcileMemberNow(id:string){if(this.gateway.synchronizingRoles.has(id))return;const c=this.file.value,guild=await this.gateway.guild(),m=await guild.members.fetch({user:id,force:true});if(this.gateway.synchronizingRoles.has(id))return;
-    await this.store.change(s=>{if(!s.initialized||s.maintenance)return;const p=player(s,id),highest=[...TIERS].reverse().find(t=>t!=='Unranked'&&c.tierRoleIds[t]&&m.roles.cache.has(c.tierRoleIds[t]!))??'Unranked';if(highest!==p.tier){p.tier=highest;syncLists(s,p,Date.now());s.audit.push({id:randomUUID(),at:Date.now(),actor:'system',action:'tier-role-reconciled',target:id});enqueue(s,'roles',{playerId:id},Date.now());enqueue(s,'lists',{},Date.now());}
+    await this.store.change(s=>{if(!s.initialized||s.maintenance)return;const p=player(s,id),highest=[...TIERS].reverse().find(t=>t!=='Unranked'&&c.tierRoleIds[t]&&m.roles.cache.has(c.tierRoleIds[t]!))??'Unranked';if(highest!==p.tier&&!restricted(s,p,Date.now())){p.tier=highest;syncLists(s,p,Date.now());s.audit.push({id:randomUUID(),at:Date.now(),actor:'system',action:'tier-role-reconciled',target:id});enqueue(s,'roles',{playerId:id},Date.now());enqueue(s,'lists',{},Date.now());}
       const tester=allowed(c,{id,roles:[...m.roles.cache.keys()],administrator:false},'verifiedTester')&&allowed(c,{id,roles:[...m.roles.cache.keys()],administrator:false},'staff');if(!tester&&s.testers[id]){const r=s.testers[id]!;delete s.testers[id];if(!Object.values(s.testers).includes(r))s.queues[r]=[];enqueue(s,'queues',{},Date.now());}});
   }
   private async actor(i:Interaction):Promise<Actor>{
     if(i.guildId!==this.file.value.community.guildId||!i.guild)throw new UserError('This action is only available in the configured server.');
-    const member=await i.guild.members.fetch({user:i.user.id,force:true});const channel=i.channelId?await i.guild.channels.fetch(i.channelId):null;
+    const member=await i.guild.members.fetch({user:i.user.id,force:true});const channel=i.channelId?(i.guild.channels.cache?.get(i.channelId)??await i.guild.channels.fetch(i.channelId)):null;
     return {id:i.user.id,roles:[...member.roles.cache.keys()],administrator:member.permissions.has(PermissionFlagsBits.Administrator),channelAccess:!!channel?.permissionsFor(member)?.has(PermissionFlagsBits.ViewChannel)};
   }
   private async ticketId(i:Interaction){const t=Object.values((await this.store.read()).tickets).find(t=>t.channelId===i.channelId&&t.status!=='closed');if(!t)throw new UserError('This channel is not a registered ticket.');return t.id;}
   private async confirm(i:Interaction,a:Actor,description:string,action:()=>Promise<string>,group:Pending['group']='owner',recovery=false){
     if(!i.isRepliable())return;const id=randomUUID();this.pending.set(id,{actor:a.id,expires:Date.now()+300_000,fingerprint:JSON.stringify(this.file.value),action,group,recovery});
     await i.editReply({content:description.slice(0,1800),components:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`confirm:${id}`).setLabel('Confirm').setStyle(ButtonStyle.Danger),new ButtonBuilder().setCustomId(`cancel:${id}`).setLabel('Cancel').setStyle(ButtonStyle.Secondary))]});
+  }
+  private async ticketCreated(i:Interaction,id:string){
+    if(!i.isRepliable())return;
+    await i.editReply({content:'Creating your ticket…',components:[],allowedMentions:{parse:[]}});
+    const waiting=this.ticketLinks.wait(id,async()=> (await this.store.read()).tickets[id]);
+    void this.runJobs().catch(()=>console.error('Saved work will retry.'));
+    const channelId=await waiting;
+    if(!channelId){await i.editReply({content:'Ticket creation is taking longer than expected. Your saved request will retry automatically.',components:[],allowedMentions:{parse:[]}});return;}
+    const url=`https://discord.com/channels/${this.file.value.community.guildId}/${channelId}`;
+    await i.editReply({content:`Ticket created: <#${channelId}>`,components:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel('Open Ticket').setStyle(ButtonStyle.Link).setURL(url))],allowedMentions:{parse:[]}});
   }
   private backups(){return new Backups(this.store,this.file.value.backups.directory);}
   async interact(i:Interaction){
@@ -95,6 +139,8 @@ export class Runtime {
   private async interactNow(i:Interaction){
     if(!i.isRepliable())return;
     try{
+      const early=(i.isChatInputCommand()&&!['stats','testerstats','testerlb'].includes(i.commandName))||(i.isButton()&&(i.customId.startsWith('support:')||i.customId.startsWith('requestclose:')||i.customId.startsWith('join:')||['waitlist','leave'].includes(i.customId)));
+      if(early)await i.deferReply({flags:MessageFlags.Ephemeral});
       const a=await this.actor(i);
       if(await this.wizardInteraction(i,a))return;
       if(await this.leaveInteraction(i,a))return;
@@ -117,19 +163,21 @@ export class Runtime {
         await i.showModal(new ModalBuilder().setCustomId(`closereason:${id}`).setTitle('Close Ticket').addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Closure reason (optional)').setStyle(TextInputStyle.Paragraph).setMaxLength(1000).setRequired(false))));return;
       }
       const publicStats=i.isChatInputCommand()&&['stats','testerstats','testerlb'].includes(i.commandName);if(publicStats)requireGroup(this.file.value,a,'staff');
-      await i.deferReply(publicStats?{}:{flags:MessageFlags.Ephemeral});let reply='Done.';
-      const createsRequest=(i.isButton()&&['waitlist','join'].includes(i.customId.split(':')[0]!))||(i.isStringSelectMenu()&&i.customId==='support')||(i.isModalSubmit()&&i.customId==='verification')||(i.isChatInputCommand()&&['start','next','forcetest','set-ticket'].includes(i.commandName));
+      if(!i.deferred&&!i.replied)await i.deferReply(publicStats?{}:{flags:MessageFlags.Ephemeral});let reply='Done.';
+      const createsRequest=(i.isButton()&&['waitlist','join','support'].includes(i.customId.split(':')[0]!))||(i.isStringSelectMenu()&&i.customId==='support')||(i.isModalSubmit()&&i.customId==='verification')||(i.isChatInputCommand()&&['start','next','forcetest','set-ticket','maketestticket'].includes(i.commandName));
       if(createsRequest&&this.setupErrors.length)throw new UserError('An administrator must finish configuration before new requests are accepted.');
       if(i.isButton()){
         const [name,value]=i.customId.split(':');
         if(name==='confirm'||name==='cancel'){const pending=this.pending.get(value!);if(!pending||pending.actor!==a.id||pending.expires<Date.now())throw new UserError('This confirmation has expired.');if(name==='cancel'){this.pending.delete(value!);reply='Cancelled.';}else{
           if(pending.group==='setup'){const s=await this.store.read();if(s.initialized)requireGroup(this.file.value,a,'owner');else if(!a.administrator)throw new UserError('Discord Administrator permission is required.');}else requireGroup(this.file.value,a,'owner');
           if(pending.fingerprint!==JSON.stringify(this.file.value))throw new UserError('Configuration changed. Review a new preview.');this.pending.delete(value!);reply=await pending.action();}}
-        else if(name==='waitlist'){if(i.channelId!==this.file.value.channels.verificationPanel)throw new UserError('Use the current request-test panel.');reply=await this.service.waitlist(a);}
+        else if(name==='waitlist'){if(i.channelId!==this.file.value.channels.verificationPanel)throw new UserError('Use the current request-test panel.');reply=await this.service.waitlist(a);if(reply==='Your high testing ticket is being opened.'){const created=currentTicket(await this.store.read(),a.id);if(created){await this.ticketCreated(i,created.id);return;}}}
         else if(name==='join'){if(i.channelId!==this.file.value.regions[value as 'NA']?.queueChannelId)throw new UserError('Use your current regional queue panel.');reply=`You joined at position ${await this.service.join(a,value!)}.`;}
+        else if(name==='requestclose'){const [,id,requestId,decision]=i.customId.split(':');if(!['accept','deny'].includes(decision??''))throw new UserError('Invalid closure decision.');if(await this.ticketId(i)!==id)throw new UserError('Use this request in its original ticket.');const result=await this.service.decideClose(a,id!,requestId!,decision==='accept');reply=result==='denied'?'Closure denied. This ticket will stay open.':'Closure confirmed. The ticket will be archived before deletion.';}
+        else if(name==='support'){if(i.channelId!==this.file.value.channels.supportPanel)throw new UserError('Use the current support panel.');const t=await this.service.support(a,value!);await this.ticketCreated(i,t.id);return;}
         else if(name==='leave'){await this.service.leave(a);reply='You left the queue.';}
         else throw new UserError('This control is no longer available.');
-      }else if(i.isStringSelectMenu()&&i.customId==='support'){const t=await this.service.support(a,i.values[0]!);reply=`Your ${t.type} ticket is being opened.`;}
+      }else if(i.isStringSelectMenu()&&i.customId==='support'){if(i.channelId!==this.file.value.channels.supportPanel)throw new UserError('Use the current support panel.');const t=await this.service.support(a,i.values[0]!);await this.ticketCreated(i,t.id);return;}
       else if(i.isStringSelectMenu()&&i.customId.startsWith('reviewvalue:')){await this.correctReview(a,i.customId.split(':')[1]!,i.values[0]!);reply='Correction saved. An Owner can preview and resume this import.';}
       else if(i.isModalSubmit()){
         if(i.customId==='verification'){const account=await lookupMinecraft(i.fields.getTextInputValue('ign'));await this.service.verify(a,account,i.fields.getTextInputValue('region').trim().toUpperCase(),i.fields.getTextInputValue('server'));reply=`Your account has been verified: ${account.ign}.`;}
@@ -144,15 +192,18 @@ export class Runtime {
           case 'leave':await this.service.leave(a);break;
           case 'start':await this.service.start(a,str('region'));reply='Your testing session is active.';break;
           case 'stop':await this.service.stop(a);reply='Your testing session ended.';break;
-          case 'next':await this.service.next(a);reply='The next ticket is being opened.';break;
+          case 'next':{const t=await this.service.next(a);await this.ticketCreated(i,t.id);return;}
           case 'passeval':await this.service.pass(a,await ticket());reply='Evaluation passed. The ticket is moving to HT3 testing.';break;
           case 'skip':await this.service.close(a,await ticket(),'skipped');reply='This test will be archived and skipped.';break;
           case 'close':await this.service.close(a,await ticket(),str('tier') as Tier|'discontinued');reply='The ticket is closing. Archival must succeed before deletion.';break;
+          case 'forceclose':await this.service.forceClose(a,await ticket(),str('reason'));reply='Support ticket closure started. Its transcript must be saved before deletion.';break;
+          case 'requestclose':await this.service.requestClose(a,await ticket(),str('reason'),str('timeout'));reply='Closure request saved. The opener can accept or deny it; an unanswered request closes at its deadline.';break;
           case 'deadline':await this.service.deadline(a,await ticket(),o.getSubcommand()==='clear'?null:str('duration'));break;
           case 'add':{const guild=await this.gateway.guild(),m=await guild.members.fetch(member());await this.service.add(a,await ticket(),m.id,allowed(c,{...a,id:m.id,roles:[...m.roles.cache.keys()]},'verifiedTester'));break;}
           case 'remove':{const guild=await this.gateway.guild(),m=await guild.members.fetch(member()),t=(await this.store.read()).tickets[await ticket()]!;if(t.accessRoles.some(id=>m.roles.cache.has(id)))throw new UserError('This member has required role-based access and cannot be removed.');await this.service.remove(a,t.id,m.id);break;}
           case 'rename':await this.service.rename(a,await ticket(),str('name'));break;
-          case 'set-ticket':{requireGroup(c,a,'staff',true);const ch=await this.gateway.text(i.channelId!);const participants=[...ch.permissionOverwrites.cache.values()].filter(x=>x.type===1&&x.allow.has(PermissionFlagsBits.ViewChannel)&&x.id!==this.client.user!.id).map(x=>x.id);const tester=o.getUser('tester')?.id??null;if(tester){const m=await(await this.gateway.guild()).members.fetch(tester);if(!allowed(c,{...a,id:m.id,roles:[...m.roles.cache.keys()]},'verifiedTester'))throw new UserError('Original tester must be a Verified Tester.');}await this.service.adopt(a,ch.id,str('type'),member(),tester,ch.name,participants);break;}
+          case 'maketestticket':
+          case 'set-ticket':{requireGroup(c,a,'staff',true);const ch=await this.gateway.text(i.channelId!);const participants=[...ch.permissionOverwrites.cache.values()].filter(x=>x.type===1&&x.allow.has(PermissionFlagsBits.ViewChannel)&&x.id!==this.client.user!.id).map(x=>x.id);const tester=o.getUser('tester')?.id??null;if(tester){const m=await(await this.gateway.guild()).members.fetch(tester);if(!allowed(c,{...a,id:m.id,roles:[...m.roles.cache.keys()]},'verifiedTester'))throw new UserError('Original tester must be a Verified Tester.');}const t=await this.service.adopt(a,ch.id,i.commandName==='maketestticket'?'test':str('type'),member(),tester,ch.name,participants);await this.ticketCreated(i,t.id);return;}
           case 'changeticket':await this.service.changeType(a,await ticket(),str('type'),o.getUser('tester')?.id??null);break;
           case 'format':{requireGroup(c,a,'staff',true);const t=(await this.store.read()).tickets[await ticket()]!;if(t.type!=='test')throw new UserError('Use this in a test ticket.');await(await this.gateway.text(t.channelId!)).send({content:this.gateway.fightTemplate(t,str('tier') as Tier),allowedMentions:{parse:[]}});reply='Formatted message sent.';break;}
           case 'addht3':case 'addlt2':{requireGroup(c,a,'staff',true);const s=await this.store.read(),t=s.tickets[await ticket()]!,tier=name==='addht3'?'HT3':'LT2';if(!t.region||!c.modules.tierLists)throw new UserError('No regional list is available.');const guild=await this.gateway.guild(),candidates=[];for(const id of s.lists[tier]?.[t.region]??[]){const p=s.players[id];if(!p||restricted(s,p,Date.now())||[t.opener,t.tester,...t.participants].includes(id))continue;const m=await guild.members.fetch(id).catch(()=>null);const channel=await this.gateway.text(t.channelId!);if(m&&!channel.permissionsFor(m).has(PermissionFlagsBits.ViewChannel))candidates.push(m);}const online=candidates.filter(m=>['online','idle','dnd'].includes(m.presence?.status??'')),pool=online.length?online:candidates;if(!pool.length)throw new UserError('No eligible opponent is available in this regional list.');const chosen=pool[Math.floor(Math.random()*pool.length)]!;await this.service.add(a,t.id,chosen.id,allowed(c,{...a,roles:[...chosen.roles.cache.keys()]},'verifiedTester'));break;}
@@ -160,10 +211,10 @@ export class Runtime {
           case 'unverify':await this.service.unverify(a,member());break;
           case 'restrict':requireGroup(c,a,'restrictionKey');{const account=await lookupMinecraft(str('ign'));await this.service.restriction(a,member(),account.uuid,str('reason'),o.getString('duration'));}break;
           case 'unrestrict':await this.service.unrestrict(a,member());break;
-          case 'forcetest':await this.service.forceTest(a,member(),str('region'));break;
+          case 'forcetest':{const t=await this.service.forceTest(a,member(),str('region'));await this.ticketCreated(i,t.id);return;}
           case 'forcestopqueue':await this.service.stopQueue(a,str('region'));break;
           case 'forceresult':case 'migrate':{requireGroup(c,a,'regulator');const p=(await this.store.read()).players[member()];let ign=o.getString('ign')??undefined;if(!p?.uuid){if(!ign)throw new UserError('Provide an IGN for this unverified player.');ign=(await lookupMinecraft(ign)).ign;}await this.service.forceResult(a,member(),str('tier') as Tier,str('region'),ign,name==='migrate'?str('source'):undefined);break;}
-          case 'resetcooldown':await this.service.cooldown(a,member(),0);break;
+          case 'resetcooldown':await this.service.resetCooldown(a,member());break;
           case 'setcooldown':await this.service.cooldown(a,member(),o.getNumber('days',true));break;
           case 'reset':requireGroup(c,a,'owner');await this.confirm(i,a,`Reset <@${member()}>? Tier, account association, region, cooldown, queue, and lists will be cleared. Restrictions and archives remain.`,async()=>{await this.service.reset(a,member());return 'Player reset.';});return;
           case 'maintenance':await this.service.maintenance(a,o.getBoolean('enabled',true));break;
@@ -188,9 +239,10 @@ export class Runtime {
             await this.confirm(i,a,`Restore ${Object.keys(backup.state.players).length} players and ${Object.keys(backup.state.tickets).length} ticket records? The current database will be backed up first.`,async()=>{if(createHash('sha256').update(await readFile(path,'utf8')).digest('hex')!==hash)throw new UserError('Backup changed; preview it again.');await this.backups().restore(path);return 'Backup restored. Maintenance remains enabled.';},'owner',true);return;}break;
           case 'migration':{if(!c.modules.migration)throw new UserError('Migration is disabled.');const sub=o.getSubcommand();requireGroup(c,a,sub==='preview'?'botAdmin':'owner');if(sub==='retry'){await this.store.change(s=>{if(!s.maintenance)throw new UserError('Enable maintenance first.');for(const j of Object.values(s.jobs))if(j.status==='pending'&&j.attempts>0)j.nextAt=0;});reply='Saved failed operations are queued for retry.';break;}
             const filename=str('filename');if(basename(filename)!==filename||!filename.endsWith('.json'))throw new UserError('Use a JSON filename in data/imports.');const path=join('data','imports',filename),raw=await readFile(path,'utf8'),s=await this.store.read(),preview=previewMigration(raw,c,s);reply=`${preview.summary}\n${[...preview.errors,...preview.issues.map(x=>x.message)].join('\n')}`;if(sub==='apply'){if(!s.maintenance)throw new UserError('Enable maintenance first.');if(preview.errors.length)throw new UserError(reply);const guild=await this.gateway.guild();for(const t of preview.data.tickets.filter(t=>preview.readyKeys.includes(`ticket:${t.channelId}`))){const ch=await guild.channels.fetch(t.channelId);if(!ch||ch.type!==ChannelType.GuildText)throw new UserError(`Missing adopted channel ${t.channelId}`);}await this.confirm(i,a,preview.summary+'\nReady records will be imported; unresolved records go to Bot Review. Roles and controls will be updated. A backup will be saved first.',async()=>{if(createHash('sha256').update(await readFile(path,'utf8')).digest('hex')!==preview.hash)throw new UserError('Import changed. Preview it again.');await this.backups().create();await applyMigration(this.store,c,preview,a.id,filename);await this.postReviews(filename,preview);return 'Ready records imported. Unresolved records await Bot Review. Saved Discord operations can retry. Maintenance remains enabled.';});return;}break;}
-          default:if(name.endsWith('list')){const tier=name.replace('list','').toUpperCase() as Tier,action=o.getSubcommand();if(action==='list'){requireGroup(c,a,'staff');const s=await this.store.read();reply=['NA','EU','AS'].map(r=>`${r}: ${(s.lists[tier]?.[r as 'NA']??[]).map(id=>`<@${id}>`).join(', ')||'No members listed'}`).join('\n');}else await this.service.list(a,tier,action as 'add'|'remove',member(),str('region'));}else throw new UserError('This command is unavailable.');
+          default:if(name.endsWith('list')){const tier=name.replace('list','').toUpperCase() as Tier,action=o.getSubcommand();if(!listTiers.includes(tier))throw new UserError('This tier list is unavailable.');if(action==='list'){requireGroup(c,a,'staff');const s=await this.store.read();reply=['NA','EU','AS'].map(r=>`${r}: ${(s.lists[tier]?.[r as 'NA']??[]).map(id=>`<@${id}>`).join(', ')||'No members listed'}`).join('\n');}else await this.service.list(a,tier,action as 'add'|'remove',member(),str('region'));}else throw new UserError('This command is unavailable.');
         }
       }
+      if(!this.store.operations.recovering)void this.runJobs().catch(()=>console.error('Saved work will retry.'));
       await i.editReply({content:reply.slice(0,1950),allowedMentions:{parse:[]}});
     }catch(error){
       const message=error instanceof UserError?error.message:error instanceof Error&&error.message.startsWith('Recovery timed out')?error.message:'The action could not complete. Check the configuration or ask an administrator to review it.';
@@ -248,8 +300,11 @@ export class Runtime {
   }
   private async statistics(command:string,id:string,period:string){const s=await this.store.read(),timezone=this.file.value.community.timezone,now=Date.now(),today=dateKey(now,timezone),start=periodStart(now,timezone,period==='weekly'?'weekly':'monthly');
     const filtered=s.completions.filter(e=>{const d=dateKey(e.at,timezone);return e.at<=now&&(period==='all'||(d>=start&&d<=today));}),counts:Record<string,number>={};for(const e of filtered)counts[e.tester]=(counts[e.tester]??0)+1;
-    if(command==='stats')return `<@${id}>: ${counts[id]??0} completed tests this month; ${s.completions.filter(e=>e.tester===id).length} all time.${this.file.value.modules.testerQuotas&&quotaExempt(s,id,today.slice(0,7),timezone,now)?' LOA exempt.':''}`;
+    if(command==='stats')return `<@${id}>: ${counts[id]??0} completed tests this month; ${allTimeTests(s,id)} all time.${this.file.value.modules.testerQuotas&&quotaExempt(s,id,today.slice(0,7),timezone,now)?' LOA exempt.':''}${s.legacyStatistics?.testers[id]?.undatedPeriodCount?` Legacy period total: ${s.legacyStatistics.testers[id]!.undatedPeriodCount} (month unavailable).`:''}`;
+    if(period==='all')for(const [tester,total]of Object.entries(s.legacyStatistics?.testers??{}))counts[tester]=(counts[tester]??0)+total.allTimeCount;
     if(command==='testerstats')for(const p of Object.values(s.players))if(p.testerSince)counts[p.id]??=0;
-    return Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([id,n],i)=>`${i+1}. <@${id}> — ${n}${command==='testerstats'&&this.file.value.modules.testerQuotas?` / ${quotaExempt(s,id,today.slice(0,7),timezone,now)?'LOA exempt':this.file.value.testing.monthlyTesterQuota}`:''}`).join('\n')||'No completed tests in this period.';
+    const rows=Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([id,n],i)=>`${i+1}. <@${id}> — ${n}${command==='testerstats'&&this.file.value.modules.testerQuotas?` / ${quotaExempt(s,id,today.slice(0,7),timezone,now)?'LOA exempt':this.file.value.testing.monthlyTesterQuota}`:''}`),visible:string[]=[];
+    for(const row of rows){if([...visible,row].join('\n').length>1750)break;visible.push(row);}
+    return (visible.join('\n')||'No completed tests in this period.')+(visible.length<rows.length?`\nShowing ${visible.length} of ${rows.length}; use /stats for an individual tester.`:'')+(period!=='all'&&s.legacyStatistics?'\nUndated legacy totals are preserved in all-time statistics.':'');
   }
 }

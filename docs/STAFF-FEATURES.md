@@ -27,7 +27,7 @@ The username check confirms the Minecraft account exists; it doesn’t prove the
 - `/format` posts the fight-result template in the ticket.
 
 **Lists and staff tools**
-- HT3, LT2, HT2, LT1 and HT1 each have a list split by region. LT2 and above update automatically for eligible linked players; HT3 is added manually.
+- HT3, LT2, HT2 and LT1 each have a list split by region. LT2 through LT1 update automatically for eligible linked players; HT3 is added manually.
 - Staff can view the lists, and List Admins can add or remove people. Long lists and queues split into pages, with old extra pages cleared when they shrink.
 - Opening a testing ticket pings the player and assigned tester. `/add` gives someone access and pings them, including when assigning a tester to an unassigned high test.
 - `/remove` removes added participants, and `/rename` changes the ticket name.
@@ -100,6 +100,19 @@ The migration tools can keep ranks, linked accounts, supported testing history, 
 We’ll need the old data exported and prepared properly before moving it. There shouldn’t need to be a tier reset if the required records are available.
 
 **Where things stand**
-The current build is v0.2.0, with 61 automated tests passing and installation checks passed on Windows and Linux. It still needs a proper run-through in a test Discord server and with the chosen remote database before we replace the current bots.
+The current build is v0.2.0, with 168 automated tests passing and installation checks passed on Windows and Linux. Each installation still needs its own test-server run-through with the chosen database, role mappings and ticket permissions before cutover.
 
 Which commands each person can use will depend on their assigned roles and which features we enable.
+
+
+## Requested ticket closure
+Staff responsible for a ticket can use `/requestclose reason timeout`, with a timeout from `1h` to `7d`. The opener gets Approve Close and Deny Close buttons. Approval closes immediately through the transcript/archive process. Denial keeps the ticket open and cancels automatic closure. Unanswered requests close after the deadline, including after a restart. Testing tickets closed this way are discontinued without awarding a new rank or test credit.
+
+
+Support staff responsible for a ticket can use `/forceclose reason` to close it without waiting for opener approval. A transcript is still saved before deletion. Existing closure requests are cancelled, and the command does not apply to testing tickets.
+
+
+Ticket names use Discord account usernames rather than server nicknames. Ticket creation confirmations include an Open Ticket link once the channel is ready, including force tests and support requests.
+
+
+Tier lists automatically remove people who leave the server. Periodic checks also clear stale entries missed during downtime; saved player ranks and history are retained.

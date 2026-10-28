@@ -7,6 +7,8 @@ export class Operations {
   private writer=false;
   private queue:{exclusive:boolean;start:()=>void;reject:(error:Error)=>void;timer?:NodeJS.Timeout}[]=[];
   get recovering(){return this.writer||this.queue.some(x=>x.exclusive);}
+  /** Detached tasks need their own reader so recovery also waits for them. */
+  independent<T>(action:()=>Promise<T>):Promise<T>{return this.context.exit(()=>this.shared(action));}
   shared<T>(action:()=>Promise<T>):Promise<T>{
     if(this.context.getStore())return action();
     return this.acquire(false,action);

@@ -7,24 +7,69 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Config } from '../config.js';
 import { emptyState, type State } from '../domain/types.js';
 import { Operations } from './operations.js';
+import { deflateSync, inflateSync } from 'node:zlib';
+
+/** Backward-compatible reader; only large remote documents use compression. */
+export function encodeRemoteState(state:State):State|{format:'crystal-deflate-v1';payload:string}{
+  const json=JSON.stringify(state),bytes=Buffer.byteLength(json);if(bytes>64*1024*1024)throw new Error('Saved state exceeds the supported remote document size');if(bytes<64*1024)return state;
+  return {format:'crystal-deflate-v1',payload:deflateSync(Buffer.from(json),{level:3}).toString('base64')};
+}
+export function decodeRemoteState(body:unknown):State {
+  const stored=body as {format?:string;payload?:string};
+  if(stored?.format==='crystal-deflate-v1'){
+    if(typeof stored.payload!=='string'||stored.payload.length>90*1024*1024)throw new Error('Invalid compressed database state');
+    const state=JSON.parse(inflateSync(Buffer.from(stored.payload,'base64'),{maxOutputLength:64*1024*1024}).toString('utf8')) as State;
+    if(state.version!==1||typeof state.guildId!=='string')throw new Error('Invalid compressed database state');return state;
+  }
+  return body as State;
+}
+
+export function boundedFetch(fetcher:typeof fetch,timeoutMs=15_000):typeof fetch {
+  return (input,init)=>fetcher(input,{...init,signal:AbortSignal.any([AbortSignal.timeout(timeoutMs),...(init?.signal?[init.signal]:[]),...(input instanceof Request?[input.signal]:[])])});
+}
 
 export interface Snapshot { revision:number; state:State }
 export interface Adapter {
   read():Promise<Snapshot>;
   compareAndSwap(revision:number,state:State):Promise<boolean>;
   close():Promise<void>;
+  readRuntimeLease?():Promise<State['runtimeLease']>;
+  acquireRuntimeLease?(owner:string,until:number):Promise<void>;
+  renewRuntimeLease?(owner:string,until:number):Promise<void>;
+  releaseRuntimeLease?(owner:string):Promise<void>;
 }
 export class Store {
   readonly operations=new Operations();
+  private committing=false;
+  private pending:{apply:(state:State)=>unknown;resolve:(value:unknown)=>void;reject:(error:unknown)=>void}[]=[];
   constructor(public adapter:Adapter){}
-  async read():Promise<State>{return (await this.adapter.read()).state;}
+  async read(includeLease=true):Promise<State>{const state=(await this.adapter.read()).state;if(includeLease&&this.adapter.readRuntimeLease){const lease=await this.adapter.readRuntimeLease();if(lease)state.runtimeLease=lease;}return state;}
   // Mutators are synchronous and side-effect free; a CAS conflict replays them.
   async change<T>(fn:(state:State)=>T):Promise<T>{
     return this.operations.shared(()=>this.commit(fn));
   }
   // Only the process lease bypasses the recovery fence; no domain writes bypass it.
-  async renewLease(owner:string,until:number){return this.commit(s=>{if(s.runtimeLease?.owner!==owner)throw new Error('Instance lease lost');s.runtimeLease.until=until;});}
+  async acquireLease(owner:string,until:number){if(this.adapter.acquireRuntimeLease)return this.adapter.acquireRuntimeLease(owner,until);return this.commit(s=>{if(s.runtimeLease&&s.runtimeLease.until>Date.now())throw new Error('Another bot instance is already using this database.');s.runtimeLease={owner,until};});}
+  async renewLease(owner:string,until:number){if(this.adapter.renewRuntimeLease)return this.adapter.renewRuntimeLease(owner,until);return this.commit(s=>{if(s.runtimeLease?.owner!==owner)throw new Error('Instance lease lost');s.runtimeLease.until=until;});}
+  async releaseLease(owner:string){if(this.adapter.releaseRuntimeLease)return this.adapter.releaseRuntimeLease(owner);return this.commit(s=>{if(s.runtimeLease?.owner===owner)delete s.runtimeLease;});}
   private async commit<T>(fn:(state:State)=>T):Promise<T>{
+    return new Promise<T>((resolve,reject)=>{this.pending.push({apply:fn,resolve:value=>resolve(value as T),reject});if(!this.committing){this.committing=true;queueMicrotask(()=>void this.flush());}});
+  }
+  private async flush(){
+    while(this.pending.length){
+      const batch=this.pending.splice(0,32);
+      try{
+        const results=await this.commitNow(state=>{
+          let candidate=structuredClone(state);const outcomes:{ok:boolean;value:unknown}[]=[];
+          for(const entry of batch){const draft=structuredClone(candidate);try{const value=entry.apply(draft);candidate=draft;outcomes.push({ok:true,value:structuredClone(value)});}catch(error){outcomes.push({ok:false,value:error});}}
+          for(const key of Object.keys(state))delete (state as unknown as Record<string,unknown>)[key];Object.assign(state,candidate);return outcomes;
+        });
+        batch.forEach((entry,index)=>{const result=results[index]!;if(result.ok)entry.resolve(result.value);else entry.reject(result.value);});
+      }catch(error){for(const entry of batch)entry.reject(error);}
+    }
+    this.committing=false;
+  }
+  private async commitNow<T>(fn:(state:State)=>T):Promise<T>{
     for(let attempt=0;attempt<30;attempt++){
       const {revision,state}=await this.adapter.read(),before=JSON.stringify(state);const result=fn(state);
       if(JSON.stringify(state)===before)return result;
@@ -66,10 +111,49 @@ export class PostgreSQLAdapter implements Adapter {
 }
 export class SupabaseAdapter implements Adapter {
   private client:SupabaseClient;
-  private constructor(url:string,key:string,private guild:string,fetcher?:typeof fetch){this.client=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false},...(fetcher?{global:{fetch:fetcher}}:{})});}
+  private cached?:{snapshot:Snapshot;until:number};
+  private pendingRead?:Promise<Snapshot>;
+  private epoch=0;
+  private leaseStorePromise?:Promise<Store>;
+  private leaseAdapter?:SupabaseAdapter;
+  private constructor(url:string,key:string,private guild:string,fetcher?:typeof fetch,client?:SupabaseClient){this.client=client??createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:boundedFetch(fetcher??fetch)}});}
   static async open(url:string,key:string,guild:string,fetcher?:typeof fetch){const a=new SupabaseAdapter(url,key,guild,fetcher);const {error}=await a.client.from('crystal_state').upsert({guild,revision:0,body:emptyState(guild)},{onConflict:'guild',ignoreDuplicates:true});if(error)throw new Error('Supabase initialization failed. Apply sql/supabase.sql and verify server credentials.');return a;}
-  async read(){const {data,error}=await this.client.from('crystal_state').select('revision,body').eq('guild',this.guild).single();if(error)throw new Error('Supabase read failed');return {revision:Number(data.revision),state:data.body as State};}
-  async compareAndSwap(revision:number,state:State){const {data,error}=await this.client.rpc('crystal_commit',{p_guild:this.guild,p_revision:revision,p_body:state});if(error)throw new Error('Supabase transaction failed');return data===true;}
+  private async leases(){
+    if(!this.leaseStorePromise)this.leaseStorePromise=(async()=>{const guild=`${this.guild}:runtime-lease`,lease=new SupabaseAdapter('', '',guild,undefined,this.client);
+      const {error}=await this.client.from('crystal_state').upsert({guild,revision:0,body:emptyState(guild)},{onConflict:'guild',ignoreDuplicates:true});if(error)throw new Error('Supabase lease initialization failed');
+      this.leaseAdapter=lease;return new Store({read:()=>lease.read(),compareAndSwap:(revision,state)=>lease.compareAndSwap(revision,state),close:async()=>{}});
+    })().catch(error=>{this.leaseStorePromise=undefined;throw error;});return this.leaseStorePromise;
+  }
+  async readRuntimeLease(){return (await(await this.leases()).read()).runtimeLease;}
+  async acquireRuntimeLease(owner:string,until:number){const legacy=(await this.read()).state.runtimeLease;if(legacy&&legacy.until>Date.now())throw new Error('Another bot instance is already using this database.');const store=await this.leases();this.leaseAdapter!.epoch++;this.leaseAdapter!.cached=undefined;this.leaseAdapter!.pendingRead=undefined;await store.acquireLease(owner,until);}
+  async renewRuntimeLease(owner:string,until:number){await(await this.leases()).renewLease(owner,until);}
+  async releaseRuntimeLease(owner:string){await(await this.leases()).releaseLease(owner);}
+  async read():Promise<Snapshot>{
+    if(this.cached&&this.cached.until>Date.now())return structuredClone(this.cached.snapshot);
+    if(this.pendingRead)return structuredClone(await this.pendingRead);
+    const epoch=this.epoch,cached=this.cached;
+    const pending=(async()=>{
+      if(cached){
+        const {data,error}=await this.client.from('crystal_state').select('revision').eq('guild',this.guild).single();
+        if(error)throw new Error('Supabase revision check failed');
+        if(Number(data.revision)===cached.snapshot.revision){if(epoch===this.epoch)this.cached={snapshot:cached.snapshot,until:Date.now()+1000};return cached.snapshot;}
+      }
+      const {data,error}=await this.client.from('crystal_state').select('revision,body').eq('guild',this.guild).single();
+      if(error)throw new Error('Supabase read failed');const snapshot={revision:Number(data.revision),state:decodeRemoteState(data.body)};if(epoch===this.epoch)this.cached={snapshot,until:Date.now()+1000};return snapshot;
+    })();
+    this.pendingRead=pending;try{return structuredClone(await pending);}finally{if(this.pendingRead===pending)this.pendingRead=undefined;}
+  }
+  async compareAndSwap(revision:number,state:State){
+    // Keep the last committed snapshot available to readers during the write.
+    // Success replaces it; failure/conflict discards it before the CAS retry.
+    this.epoch++;this.pendingRead=undefined;
+    let response;try{response=await this.client.rpc('crystal_commit',{p_guild:this.guild,p_revision:revision,p_body:encodeRemoteState(state)});}catch{this.epoch++;this.cached=undefined;this.pendingRead=undefined;throw new Error('Supabase transaction failed');}
+    const {data,error}=response;
+    this.epoch++;this.pendingRead=undefined;
+    if(error){this.cached=undefined;throw new Error('Supabase transaction failed');}
+    if(data===true)this.cached={snapshot:{revision:revision+1,state:structuredClone(state)},until:Date.now()+1000};else this.cached=undefined;
+    return data===true;
+  }
   async close(){}
 }
 export async function openStore(c:Config,env:NodeJS.ProcessEnv=process.env):Promise<Store>{

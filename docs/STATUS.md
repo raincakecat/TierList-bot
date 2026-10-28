@@ -14,7 +14,7 @@
 
 ## Verified locally
 
-61 automated tests passed on Windows with Node v24.18.0. Tests use real local SQLite and in-memory state; mock transport tests do not substitute for an actual Discord server. TypeScript compilation checks the pinned Discord and Supabase interfaces. Recovery races/timeouts, wizard authorization/confirmation, health privacy/failure output, long transcripts, panel cleanup and LOA lifecycle/notifications/quota boundaries are covered. See LOAD-CHECKS.md for the measured 5,000-player load run.
+168 automated tests passed on Windows and Linux using Node 24.18.0. Automated tests cover real local SQLite and mocked Discord/Supabase transports, plus emulated PostgreSQL. The runtime has also been deployed with Discord, Supabase and SQLite, but that does not validate a new community's permissions or hosting. See UPDATES-2026-10-28.md for the current feature changes.
 
 ## Required before calling the build production-ready
 
@@ -25,6 +25,6 @@
 - Rehearse staff role changes, member departure during ticket creation, and configuration changes while jobs are pending.
 - Review the final command reference against registered command names and the approved specification.
 
-No live bot deployment or production migration has been performed. Do not stop an existing bot until rehearsal passes.
+This reusable release remains an implementation candidate. Do not stop an existing community bot until your own rehearsal passes. Private deployment settings, live member data and private reports are not part of this repository.
 
 Use LIVE-REHEARSAL.md and DATABASE-REHEARSAL.md for the remaining live checks. CI results should be reviewed separately from the local test results above.

@@ -12,7 +12,7 @@ async function main(){
   const policy=await readFile('local-policy.json','utf8').catch(()=>null);if(policy){const parsed=JSON.parse(policy.replace(/^\uFEFF/,'')) as {actors?:string[]};if(Array.isArray(parsed.actors))loadLocalPolicy(parsed.actors);}
   if(!process.env.DISCORD_TOKEN)throw new Error('Set DISCORD_TOKEN in the local environment before starting.');
   const store=await openStore(file.value),client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent,GatewayIntentBits.GuildPresences],allowedMentions:{parse:[]}}),runtime=new Runtime(client,file,store);
-  client.once('clientReady',()=>void runtime.ready().catch(async(e:Error)=>{console.error(e.message);client.destroy();await store.close();process.exitCode=1;}));
+  client.once('clientReady',()=>void runtime.ready().catch(async(e:Error)=>{console.error(e.message);try{await runtime.stop();}catch{}finally{client.destroy();await store.close().catch(()=>{});process.exit(1);}}));
   client.on('error',()=>console.error('Discord connection error.'));
   let stopping=false;for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{if(stopping)return;stopping=true;void runtime.stop().then(()=>process.exit(0),()=>process.exit(1));});
   try{await client.login(process.env.DISCORD_TOKEN);}catch{await store.close();client.destroy();throw new Error('Discord login failed. Verify token and required gateway intents.');}

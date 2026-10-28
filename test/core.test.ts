@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { configSchema, readiness } from '../src/config.js';
 import { emptyState, type Actor } from '../src/domain/types.js';
 import { MemoryAdapter, Store, SQLiteAdapter } from '../src/storage/store.js';
-import { Service } from '../src/domain/service.js';
+import { Service, syncLists } from '../src/domain/service.js';
 import { Backups, decodeBackup } from '../src/storage/backups.js';
 import { Worker } from '../src/storage/jobs.js';
 
@@ -28,3 +28,24 @@ test('non-staff cannot close test even with ticket access',async()=>{const f=awa
 test('SQLite CAS and persistence protect concurrent updates across connections',async()=>{const dir=await mkdtemp(join(tmpdir(),'crystal-'));const file=join(dir,'state.sqlite');const a=new Store(new SQLiteAdapter(file,ID)),b=new Store(new SQLiteAdapter(file,ID));try{await Promise.all(Array.from({length:12},(_,i)=>(i%2?a:b).change(s=>{s.audit.push({id:String(i),actor:ID,action:'test',target:ID,at:i});})));assert.equal((await a.read()).audit.length,12);assert.equal((await b.read()).audit.length,12);}finally{await a.close();await b.close();await rm(dir,{recursive:true});}});
 test('portable backup validates UUID uniqueness and restores only during maintenance',async()=>{const f=await fixture();await verify(f);const dir=await mkdtemp(join(tmpdir(),'crystal-backup-'));try{const backups=new Backups(f.store,dir),file=await backups.create();await assert.rejects(backups.restore(file),/maintenance/);await f.service.maintenance(admin,true);await backups.restore(file);assert.equal((await f.store.read()).players[P1]!.ign,'PlayerOne');const b=JSON.parse(await readFile(file,'utf8'));b.state.players[P2]={...b.state.players[P1],id:P2};assert.throws(()=>decodeBackup(JSON.stringify(b),ID),/Duplicate/);}finally{await rm(dir,{recursive:true});}});
 test('failed background work is retained and successful checkpoints survive retry',async()=>{const f=await fixture();await f.store.change(s=>{s.jobs.test={id:'test',kind:'notice',data:{},status:'pending',nextAt:0,attempts:0,checkpoints:{}};});let calls=0;const w=new Worker(f.store,async(j,save)=>{if(!j.checkpoints.sent)await save('sent',true);if(++calls===1)throw new Error('transport');},async()=>{});await w.runOnce();let j=(await f.store.read()).jobs.test!;assert.equal(j.status,'pending');assert.equal(j.checkpoints.sent,true);await f.store.change(s=>s.jobs.test!.nextAt=0);await w.runOnce();j=(await f.store.read()).jobs.test!;assert.equal(j.status,'done');});
+
+
+test('HT1 ranks remain valid without an HT1 list or command',async()=>{const f=await fixture();f.c.tierLists.channelIds.HT1=null;assert(!readiness(f.c).some(e=>e.includes('tierLists.channelIds.HT1')));
+ await f.store.change(s=>{s.players[P1]={id:P1,tier:'HT1',uuid:'a'.repeat(32),ign:'Example',region:'NA',preferredServer:null,waitlist:false,cooldownUntil:0};s.lists.LT1={NA:[P1]};s.lists.HT1={NA:[P1]};syncLists(s,s.players[P1]!,1000000);});
+ const state=await f.store.read();assert.equal(state.players[P1]!.tier,'HT1');assert.deepEqual(state.lists.HT1?.NA,[]);assert.deepEqual(state.lists.LT1?.NA,[]);
+ await assert.rejects(f.service.list(admin,'HT1','add',P1,'NA'),/disabled or invalid/);
+});
+
+
+test('passing evaluation prefers the saved Discord username over the nickname in the high ticket name',async()=>{const f=await fixture();await f.service.verify(actor(P1),{uuid:'a'.repeat(32),ign:'MinecraftIGN'},'NA','server');await f.service.waitlist(actor(P1));await f.service.start(admin,'NA');await f.service.join(actor(P1),'NA');const t=await f.service.next(admin);await f.store.change(s=>{s.tickets[t.id]!.status='open';s.tickets[t.id]!.openingNickname='Server Nickname';s.tickets[t.id]!.openingDiscordUsername='discord_username';});await f.service.pass(admin,t.id);const saved=(await f.store.read()).tickets[t.id]!;assert.equal(saved.name,'discord_username-ht3-na');assert.equal(saved.openingIgn,'MinecraftIGN');});
+
+
+test('member departure removes queue and all regional list entries without deleting profile history',async()=>{const f=await fixture();await f.store.change(s=>{s.players[P1]={id:P1,tier:'LT2',uuid:'a'.repeat(32),ign:'Example',region:'NA',preferredServer:'server',cooldownUntil:9999999,waitlist:true};s.lists.HT3={NA:[P1],EU:[P1]};s.lists.LT2={AS:[P1,P2]};s.lists.HT1={NA:[P1]};s.queues.NA=[P1,P2];});const before=(await f.store.read()).players[P1];await f.service.departed(P1);await f.service.departed(P1);const s=await f.store.read();assert.deepEqual(s.players[P1],before);assert.deepEqual(s.lists.HT3?.NA,[]);assert.deepEqual(s.lists.HT3?.EU,[]);assert.deepEqual(s.lists.LT2?.AS,[P2]);assert.deepEqual(s.lists.HT1?.NA,[]);assert.deepEqual(s.queues.NA,[P2]);assert.deepEqual(s.departures,[P1]);assert(Object.values(s.jobs).some(j=>j.kind==='lists'));});
+
+test('CD Resetter can reset individual cooldowns without receiving cooldown editing or bulk reset permissions',async()=>{
+ const f=await fixture(),role='100000000000000009';f.c.permissionGroups.cdResetter=[role];const resetter={...actor(P2),roles:[role]};await verify(f);await f.service.cooldown(admin,P1,3);
+ await assert.rejects(f.service.resetCooldown(actor(P2),P1),/permission/);await f.service.resetCooldown(resetter,P1);let s=await f.store.read();assert.equal(s.players[P1]!.cooldownUntil,0);assert.equal(s.players[P1]!.uuid,'a'.repeat(32));assert.equal(s.audit.at(-1)!.actor,P2);
+ await assert.rejects(f.service.cooldown(resetter,P1,2),/permission/);await assert.rejects(f.service.cooldown(resetter,P1,0),/permission/);await assert.rejects(f.service.resetAllCooldowns(resetter),/permission/);
+ await f.service.cooldown(admin,P1,2);await f.service.resetCooldown(admin,P1);assert.equal((await f.store.read()).players[P1]!.cooldownUntil,0);
+});
+test('legacy configurations default the optional CD Resetter role to empty',()=>{const old=JSON.parse(JSON.stringify(template));delete old.permissionGroups.cdResetter;assert.deepEqual(configSchema.parse(old).permissionGroups.cdResetter,[]);});

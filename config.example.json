@@ -29,6 +29,7 @@
   "permissionGroups": {
     "owner": [],
     "botAdmin": [],
+    "cdResetter": [],
     "staff": [],
     "verifiedTester": [],
     "regulator": [],
@@ -236,5 +237,12 @@
   },
   "loa": {
     "roleId": null
+  },
+  "restriction": {
+    "roleId": null
+  },
+  "ticketNotifications": {
+    "highTestingRoleIds": null,
+    "supportRoleIds": null
   }
 }

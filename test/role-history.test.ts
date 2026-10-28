@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {recoverOpeningTier,type TierHistory} from '../src/storage/role-history.js';
+const P='100000000000000001',LOW='100000000000000002',HIGH='100000000000000003',at=1792400000000;
+function history():TierHistory{return {capturedAt:at+1000,earliest:at-1000,exhausted:false,members:{[P]:{joinedAt:at-5000,capturedAt:at+1000,roles:[HIGH]}},events:[{id:'2',memberId:P,at:at+500,added:[HIGH],removed:[LOW]}]};}
+const roles={LT3:LOW,HT3:HIGH},integrity={complete:true,changes:[]};
+test('audit replay recovers the actual older tier rather than using a current or interim rank',()=>{assert.deepEqual(recoverOpeningTier(P,at,roles,history(),integrity),{tier:'LT3',auditIds:['2']});});
+test('unchanged current rank is usable only with complete retained audit coverage',()=>{const h=history();h.events=[];assert.deepEqual(recoverOpeningTier(P,at,roles,h,integrity),{tier:'HT3',auditIds:[]});h.earliest=at+1;assert('reason'in recoverOpeningTier(P,at,roles,h,integrity));});
+test('missing/rejoined members, old references and role-identity changes stay pending',()=>{const h=history();assert('reason'in recoverOpeningTier('missing',at,roles,h,integrity));h.members[P]!.joinedAt=at+1;assert('reason'in recoverOpeningTier(P,at,roles,h,integrity));h.members[P]!.joinedAt=at-5000;assert('reason'in recoverOpeningTier(P,at,roles,h,{complete:true,changes:[{at:at+1}]}));h.capturedAt=at+46*86400000;assert('reason'in recoverOpeningTier(P,at,roles,h,integrity));});
+test('inconsistent role deltas and same-millisecond ambiguity are never accepted as evidence',()=>{const h=history();h.members[P]!.roles=[];assert('reason'in recoverOpeningTier(P,at,roles,h,integrity));h.members[P]!.roles=[HIGH];h.events[0]!.at=at;assert('reason'in recoverOpeningTier(P,at,roles,h,integrity));});

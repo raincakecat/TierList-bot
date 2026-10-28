@@ -20,16 +20,22 @@ STAFF
 /format tier - Fight-result Markdown template.
 /add member /remove member - Manage added participants.
 /rename name - Rename current ticket.
+/forceclose reason - Immediately close the current support ticket without opener approval. Responsible closing staff or Owner only; required reason; transcript archival still precedes deletion. Testing tickets use /close instead.
+/requestclose reason timeout - Responsible closing staff (Staff for testing) or Owner can request closure for 1h-7d. Only the opener approves or denies. Approval or unanswered expiry closes through archival; denial keeps it open. Testing closure discontinues without test credit.
 /addht3 /addlt2 - Select eligible regional opponent.
 /set-ticket type member [tester] - Adopt existing channel.
+/maketestticket member tester - Register the current channel as a testing ticket. Staff with channel access; tester must be a Verified Tester.
 /changeticket type [tester] - Change permitted ticket route.
 /uuid ign - UUID lookup.
 /stats [member] /testerstats - Monthly statistics.
 /testerlb [period] - Monthly, weekly, or all-time leaderboard.
-/ht3list list /lt2list list /ht2list list /lt1list list /ht1list list - View members.
+/ht3list list /lt2list list /ht2list list /lt1list list - View members.
+
+CD RESETTER
+/resetcooldown member - Clear one player's cooldown. No other Bot Admin permissions.
 
 BOT ADMIN
-/health - Private database, jobs, backup, recovery and configuration health.
+/health - Private database, jobs, backup, recovery and configuration health; includes state size and safe retry causes.
 /unverify member - Unlink Minecraft association; keep Discord rank/cooldown.
 /addtester member /stoptester member - Manage tester authorization.
 /resetcooldown member /setcooldown member days - Individual cooldown.
@@ -48,7 +54,7 @@ REGULATOR
 
 RESTRICTION KEY
 /restrict member ign reason [duration] - Restrict account pair, remove list/queue membership.
-/unrestrict member - Remove pair restriction.
+/unrestrict member - Remove pair restriction, restore the saved pre-restriction tier, and synchronize tier/Restricted roles. Cooldowns stay unchanged; high-list membership is not restored automatically.
 
 LOA ADMIN (Owner inherits)
 Accept/Deny buttons in LOA In Progress - Decide a pending request; denial requires a reason.
@@ -60,7 +66,7 @@ Withdraw Request / End My LOA - Requester-only pending cancellation or early ret
 One pending/active request per member. Approval starts leave; expiry removes its role. Any approved monthly overlap exempts quota without preventing testing or changing counts.
 
 LIST ADMIN
-/ht3list add|remove member region and equivalent lt2/ht2/lt1/ht1 commands - Manage regional membership.
+/ht3list add|remove member region and equivalent lt2/ht2/lt1 commands - Manage regional membership.
 
 OWNER (initial setup allows Discord Administrator before initialization)
 /setup wizard - Private draft setup/configuration screens, review and confirmation.

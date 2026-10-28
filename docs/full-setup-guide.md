@@ -1,13 +1,13 @@
 # Crystal Tier List Bot
 ## Full installation and operations guide
 
-Version 0.2.0 | Updated October 14, 2026
+Version 0.2.0 | Updated October 28, 2026
 
 This package contains a configurable Discord bot for Crystal PvP account linking, regional testing, tier lists, support tickets, deadlines, restrictions, and backups. Each installation serves one Discord community using one bot application and one running process.
 
 The full-package ZIP includes compiled JavaScript, TypeScript source, automated tests, pinned dependencies, configuration templates, SQL setup, launchers, and this guide. Node.js and downloaded dependencies are not bundled. Internet access is needed for installation and normal operation.
 
-Release status: 61 local automated tests passed. A clean Windows installation passed configuration validation. Discord behavior is tested with simulated transports; PostgreSQL uses an emulator and Supabase uses a mocked API in these checks. Windows/Linux automated checks are configured in GitHub Actions; review their actual results separately. Live Discord, real remote databases, and the target hosting environment still need rehearsal. Use an isolated Discord server first.
+Release status: 168 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite, and Supabase has been exercised live. This reusable package remains an implementation candidate: validate your own server permissions, hosting, remote database, and recovery flow in rehearsal. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
 
 Read the quick start for the shortest installation route. The later sections explain configuration, permissions, hosting, recovery, migration, and troubleshooting. Commands shown in this guide must be entered in the specified place: host terminal commands on the machine running the bot, and slash commands inside your Discord server.
 
@@ -85,7 +85,7 @@ config.example.json is a template. config.json is your installation's live setti
 
 community: set guildId, a community name, and an IANA timezone such as America/New_York or Europe/London. Statistics and monthly reports use this timezone.
 
-modules: testing, supportTickets, and tierLists can be enabled separately, but tierLists and testerQuotas require testing. The tierLists switch covers all five HT3, LT2, HT2, LT1, and HT1 lists. Migration and staff LOA are optional; LOA defaults to disabled. Disabling requests does not erase existing tickets or history.
+modules: testing, supportTickets, and tierLists can be enabled separately, but tierLists and testerQuotas require testing. The tierLists switch covers the four HT3, LT2, HT2, and LT1 lists. Migration and staff LOA are optional; LOA defaults to disabled. Disabling requests does not erase existing tickets or history.
 
 regions: NA, EU, and AS each have enabled, regionRoleId, waitlistRoleId, queueChannelId, and testCategoryId. Enable at least one region for testing. A region role records the selected region; a separate waitlist role grants regional queue access.
 
@@ -198,7 +198,7 @@ Verify Account requests the Minecraft in-game name, one enabled region, and pref
 
 Enter Waitlist gives the separate region waitlist role and access to that region's queue. Verification alone does not grant this waitlist role. Members cannot change region themselves by verifying again. Bot Admins use /unverify when an incorrect/lost Minecraft account needs to be unlinked; this preserves Discord rank and cooldown, clears the association/region/waitlist, and allows re-verification. Open tests must be finished first.
 
-For a normal test, a tester uses /start region:NA (or EU/AS). Eligible players press Join Queue in their regional panel. /next reserves the earliest eligible entry and opens a ticket for the tester. /leave removes a player from the queue. /stop ends the tester session; the last tester stopping clears that regional queue. Restart also ends active tester sessions.
+For a normal test, a tester uses /start region:NA (or EU/AS). Eligible players press Join Queue in their regional panel. /next reserves the earliest eligible entry and opens a ticket for the tester. /leave removes a player from the queue. /stop ends the tester session; the last tester stopping clears that regional queue. A graceful restart can resume sessions within a short recovery window; a cold or delayed restart closes stale sessions.
 
 Normal evaluation tickets open in their regional category as test-username-region. Opening messages mention the player and assigned tester and show their saved account information. Previous Rank is the rank captured when the ticket was opened, even if the player receives an interim rank afterward.
 
@@ -208,7 +208,7 @@ Existing high-tier players bypass the normal queue: HT3 requests LT2; LT2 reques
 
 /close records the chosen tier, updates roles and eligible lists, credits the original tester once, applies cooldown, posts the result with six reactions, and queues archival. /format posts an editable Markdown fight template; it does not decide the result.
 
-HT3 list membership is manual. LT2 and higher membership is maintained automatically for eligible linked players. List embeds are grouped by region. Large lists/queues paginate at line boundaries to keep mentions intact; obsolete bot-managed pages are removed when they shrink. Unrelated channel messages are preserved. Restrictions remove list memberships and block testing; expiry alone does not restore those memberships.
+HT3 list membership is manual. LT2, HT2, and LT1 membership is maintained automatically for eligible linked players. HT1 ranks and tests are supported without an HT1 list. List embeds are grouped by region. Large lists/queues paginate at line boundaries to keep mentions intact; obsolete bot-managed pages are removed when they shrink. Unrelated channel messages are preserved. Restrictions remove list memberships and block testing; expiry alone does not restore those memberships.
 
 ---PAGE---
 # 8. Command reference: players and ticket staff
@@ -242,7 +242,7 @@ Staff commands inside tickets
 
 List commands
 
-/ht3list, /lt2list, /ht2list, /lt1list, and /ht1list each have list, add, and remove subcommands. Staff can view lists; List Admins can add/remove with an explicit region. Adding requires the player's saved rank to match and the account to be unrestricted.
+/ht3list, /lt2list, /ht2list, and /lt1list each have list, add, and remove subcommands. Staff can view lists; List Admins can add/remove with an explicit region. Adding requires the player's saved rank to match and the account to be unrestricted.
 
 ---PAGE---
 # 9. Command reference: administration
@@ -285,7 +285,7 @@ Closing locks the ticket and queues asynchronous work. The durable queue saves a
 
 copyImages defaults to true for reports and appeals. It copies supported images from Discord attachment hosts, with a 25 MiB per-image limit. Videos are not copied. Attachment links and YouTube URLs remain in the transcript. A link may later expire or become unavailable, so this is not a permanent video evidence store.
 
-Images are saved privately in the archive directory and removed after the configured imageRetentionDays (default 10). Cleanup covers the current root and historic directories recorded on saved tickets. It deletes only expired managed images, preserving transcripts and unrelated files. Transcripts do not automatically expire. The current archive attachment limit is 8 MiB per Markdown transcript; larger required transcripts retain the channel for staff intervention. Monitor available disk space.
+Images are saved privately in the archive directory and removed after the configured imageRetentionDays (default 10). Cleanup covers the current root and historic directories recorded on saved tickets. It deletes only expired managed images, preserving transcripts and unrelated files. Transcripts do not automatically expire. The current archive attachment limit is multipart Markdown transcripts with 7 MiB chunks; larger required transcripts retain the channel for staff intervention. Monitor available disk space.
 
 Use /deadline set duration:3h as a Regulator who can access the ticket. It sets/replaces the deadline and notifies participants. /deadline clear cancels it. At expiry, the person who set it receives the review notification. It does not delete the ticket, override evidence requirements, or choose a result.
 
@@ -485,3 +485,26 @@ https://supabase.com/docs/reference/javascript/rpc
 https://supabase.com/docs/guides/database/postgres/row-level-security
 
 For exact local behavior, consult src/config.ts, src/domain/service.ts, src/discord/runtime.ts, and docs/STATUS.md. This guide documents the 0.2.0 candidate; repeat validation after changing code, dependencies, roles, or databases. Full command permissions are in docs/COMMANDS.txt; dedicated live checks are in docs/LIVE-REHEARSAL.md and docs/DATABASE-REHEARSAL.md. Measured local volume checks are in docs/LOAD-CHECKS.md.
+
+---PAGE---
+# 16. October 28 updates and operations notes
+
+Queue notifications: the first tester opening a regional queue posts one plain @here message in its waitlist channel. It remains until the last tester stops, staff closes the queue, or testing is paused/disabled. The saved reference survives restart. Additional testers joining an already-open region do not send another ping.
+
+Ticket names use Discord account usernames rather than server nicknames. Ticket creation confirmations include a channel link once creation finishes. /maketestticket member tester registers an existing channel as a testing ticket; it requires Staff access and an eligible tester.
+
+/requestclose reason timeout requests permission from the opener to close a ticket. Timeout accepts 1h through 7d. Acceptance closes immediately, denial keeps it open, and unanswered requests close at expiry. Responsible ticket staff permissions apply. /forceclose reason applies to support tickets and still preserves the required transcript before deletion.
+
+The optional CD Resetter permission group grants only /resetcooldown member. It does not grant /setcooldown, global cooldown resets, configuration, or other Bot Admin powers. Setup can create the role; map existing IDs through the wizard or permissionGroups.cdResetter.
+
+ticketNotifications.highTestingRoleIds and supportRoleIds optionally select opening ping roles. Null uses configured defaults; an empty array disables role pings. Notification roles do not grant channel access or command permissions.
+
+Published lists cover HT3, LT2, HT2, and LT1. HT1 rank/testing remains available without an HT1 list. Departed members are removed from published lists without deleting player history. /unrestrict restores the saved pre-restriction rank role when available.
+
+Large transcripts are uploaded in numbered parts before channel deletion. Result delivery does not block transcript archival. Safe deletion delays remain configurable; setting zero removes only the additional delay after required uploads succeed. Discord rate limits and network failures still affect timing.
+
+Supabase stores large records in a compressed envelope and polls revisions instead of downloading unchanged full state. Heartbeats use a separate small lease record. Existing plain records and portable JSON backups remain supported. Before installing older code that lacks compression support, stop the bot and run scripts/restore-plain-supabase-state.mjs with --confirm using the current runtime.
+
+For a single-host installation, SQLite removes remote database bandwidth dependence. The stopped-service scripts/move-to-local-sqlite.mjs --confirm utility validates and copies a Supabase source to a new data/lunar.sqlite, preserves a private source export and configuration, verifies the copy, then switches configuration. It refuses an active source lease or existing destination. Never run both backends as live writers. The retained source becomes historical; do not switch back without transferring newer local changes.
+
+Daily validated exports retain ten automatic backups. They depend on the bot running and do not protect against loss of the VM disk. Keep an independent disk/off-host backup, including configuration and evidence. Host moves do not erase prior remote usage charges.

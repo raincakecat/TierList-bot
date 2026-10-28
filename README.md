@@ -6,7 +6,7 @@ Version 0.2.0 adds staff Leave of Absence requests, approval controls, timed rol
 
 **Full package:** [Download the ZIP with compiled files and PDF setup guide](full-package/full-package.zip), or [read the PDF guide](docs/Full-Setup-Guide.pdf).
 
-**Status:** code builds and automated local checks run. It has not been connected to a live Discord server or a real Supabase/PostgreSQL deployment. Rehearse in a test server before production cutover. See `docs/STATUS.md` for the remaining release checks.
+**Status:** 168 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite; Supabase has also been exercised live. This reusable package remains an implementation candidate: rehearse your own roles, channels, database, and recovery procedures before cutover. See `docs/STATUS.md`.
 
 ## Install the ready-to-run ZIP
 
@@ -47,7 +47,7 @@ The private `/setup wizard` edits a draft until confirmation. Its screens cover 
 
 Verification validates an account's existence and UUID, then links it to the Discord player. It is not proof of Minecraft account ownership. Rank/history stay with the Discord ID after staff unlink an account.
 
-Normal queue tests open in regional categories. `/passeval` records LT3 and moves the ticket to HT3 testing. HT3/LT2/HT2/LT1 players request the next high tier directly. Staff close tests with a tier or Test Discontinued. Previous Rank is captured when the ticket opens. HT3 list entry is manual; LT2 and higher list entry is automatic.
+Normal queue tests open in regional categories. `/passeval` records LT3 and moves the ticket to HT3 testing. HT3/LT2/HT2/LT1 players request the next high tier directly. Staff close tests with a tier or Test Discontinued. Previous Rank is captured when the ticket opens. HT3 list entry is manual; LT2, HT2, and LT1 list entry is automatic. HT1 ranks/tests remain supported without a dedicated HT1 list.
 
 Support includes five configurable defaults and custom types. Type-specific access applies even in overflow categories. Opening messages are pinned. Only responsible staff can use the close button. Every enabled ticket type requires an archive channel.
 
@@ -65,11 +65,11 @@ Any approved leave overlapping a month exempts that tester from the entire month
 
 ## Archives and recovery
 
-Closure locks the channel and saves work in a durable queue. Required transcript/image archival must succeed before deletion. Failed operations remain saved and retry with backoff; the operational log reports failures. Result posts use a persisted reference and Discord nonce to recover from uncertain sends.
+Closure locks the channel and saves work in a durable queue. Required transcript/image archival must succeed before deletion. Failed operations remain saved and retry with backoff; the operational log reports failures. Result posts use saved message IDs and Discord nonces to recover from uncertain sends, without visible logging references.
 
 Images from reports/appeals are copied by default, videos are not copied, and YouTube/attachment links remain in Markdown transcripts. Images are stored privately under `data/archives`, removed after the configured retention (default ten days), and must be accessed through authorized host access. Transcripts have no automatic expiry. Do not serve the archive folder publicly.
 
-Current evidence limits are **25 MiB per copied image** and **8 MiB per Markdown transcript**. Oversized/failed required archives retain the channel for staff intervention. These limits need testing against your server's expected ticket volumes.
+Current evidence limits are **25 MiB per copied image** and **multipart Markdown transcripts (7 MiB chunks for large exports)**. Oversized/failed required archives retain the channel for staff intervention. These limits need testing against your server's expected ticket volumes.
 
 Daily portable database backups retain the latest ten successful automatic backups. Manual exports are not automatically removed. Host backups do not copy local evidence files: back up the archive directory separately if you need disaster recovery for evidence.
 
@@ -96,3 +96,16 @@ From the extracted directory, install PM2 if desired and run `pm2 start dist/src
 ## Documentation sources
 
 Runtime conventions follow the [discord.js documentation](https://discord.js.org/docs/packages/discord.js/main), [Node.js SQLite documentation](https://nodejs.org/api/sqlite.html), [Supabase RPC documentation](https://supabase.com/docs/reference/javascript/rpc), and [Supabase RLS documentation](https://supabase.com/docs/guides/database/postgres/row-level-security). Dependency versions are pinned in `package-lock.json`.
+
+## Recent updates
+
+- Opening a regional queue posts one plain `@here` in the waitlist channel. It stays until that queue closes; joining additional testers does not send another ping.
+- Ticket names use Discord account usernames. Creation confirmations include a channel link.
+- `/requestclose reason timeout` lets the opener accept or deny; pending requests close automatically after 1h–7d. `/forceclose reason` is for responsible support staff and still requires archival.
+- `/maketestticket member tester` registers an existing channel as a test ticket.
+- Optional `permissionGroups.cdResetter` grants only `/resetcooldown`, without other Bot Admin powers.
+- `ticketNotifications` can override high-test and support opening role pings without granting access.
+- Departed members are removed from published tier lists while player history remains saved.
+- Remote state uses compression, revision-only polling, batched commits, separate small runtime leases, and bounded requests. SQLite on a single VM avoids remote bandwidth dependence; keep independent backups.
+
+See [release notes](docs/UPDATES-2026-10-28.md) and [commands](docs/COMMANDS.txt).

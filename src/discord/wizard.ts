@@ -11,9 +11,12 @@ export function wizardResources(c:Config):Resource[]{
   for(const tier of Object.keys(c.tierRoleIds))add(`tierRoleIds.${tier}`,`Tier role: ${tier}`);
   for(const region of REGIONS)for(const field of ['regionRoleId','waitlistRoleId','queueChannelId','testCategoryId'])add(`regions.${region}.${field}`,`${region}: ${field}`);
   for(const channel of Object.keys(c.channels))add(`channels.${channel}`,`Channel: ${channel}`);
+  add('ticketNotifications.highTestingRoleIds','High-test notification roles',true);
+  add('ticketNotifications.supportRoleIds','Support notification roles',true);
   add('loa.roleId','Role: LOA');
+  add('restriction.roleId','Optional role: Restricted');
   add('categories.highTests','Category: High Tests');add('categories.overflow','Categories: Overflow',true);
-  for(const tier of Object.keys(c.tierLists.channelIds))add(`tierLists.channelIds.${tier}`,`List channel: ${tier}`);
+  for(const tier of Object.keys(c.tierLists.channelIds).filter(t=>t!=='HT1'))add(`tierLists.channelIds.${tier}`,`List channel: ${tier}`);
   c.supportTicketTypes.forEach((t,index)=>{add(`supportTicketTypes.${index}.categoryId`,`${t.name}: category`);add(`supportTicketTypes.${index}.archiveChannelId`,`${t.name}: archive`);});
   return out;
 }
@@ -50,7 +53,7 @@ export function wizardView(s:Session){const c=s.draft,embed=new EmbedBuilder().s
     rows.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`wizard:${s.id}:modules`).setPlaceholder('Enabled features').setMinValues(0).setMaxValues(Object.keys(c.modules).length).addOptions(Object.entries(c.modules).map(([key,on])=>({label:key,value:key,default:on})))));
   }
   if(s.view==='resources'){const resources=wizardResources(c),pages=Math.ceil(resources.length/25);s.resourcePage=Math.max(0,Math.min(pages-1,s.resourcePage));const slice=resources.slice(s.resourcePage*25,s.resourcePage*25+25);
-    rows.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`wizard:${s.id}:mapping`).setPlaceholder(`Resource mappings (${s.resourcePage+1}/${pages})`).addOptions(slice.map((r,index)=>({label:r.label.slice(0,100),value:String(s.resourcePage*25+index),description:String(get(c,r.path)??'Create missing').slice(0,100)||'Create missing'})))));
+    rows.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(new StringSelectMenuBuilder().setCustomId(`wizard:${s.id}:mapping`).setPlaceholder(`Resource mappings (${s.resourcePage+1}/${pages})`).addOptions(slice.map((r,index)=>({label:r.label.slice(0,100),value:String(s.resourcePage*25+index),description:String(get(c,r.path)??(r.path==='restriction.roleId'?'Disabled':'Create missing')).slice(0,100)||'Create missing'})))));
     rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(button(s,'prev','Previous').setDisabled(s.resourcePage===0),button(s,'next','Next').setDisabled(s.resourcePage===pages-1)));
   }
   rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(button(s,'cancel','Cancel')));return {embeds:[embed],components:rows,allowedMentions:{parse:[] as never[]}};
@@ -58,6 +61,6 @@ export function wizardView(s:Session){const c=s.draft,embed=new EmbedBuilder().s
 export function wizardModal(s:Session,action:string){const modal=new ModalBuilder().setCustomId(`wizard:${s.id}:${action}`).setTitle(action.startsWith('map-')?'Resource Mapping':'Setup Settings');const field=(id:string,label:string,value:string,max=100,required=true)=>{const input=new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(TextInputStyle.Short).setRequired(required).setMaxLength(max);if(value)input.setValue(value);return modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));};
   if(action==='community'){field('name','Community name',s.draft.community.name);field('timezone','Timezone (example: America/New_York)',s.draft.community.timezone);}
   else if(action==='policy'){field('normal','Normal cooldown: 0, 30m, 3h, or 7d',s.draft.testing.normalCooldown??'');field('high','High cooldown: 0, 30m, 3h, or 7d',s.draft.testing.highCooldown??'');field('quota','Monthly quota: 0 disables it',String(s.draft.testing.monthlyTesterQuota??0));field('capacity','Queue capacity per region (1-1000)',String(s.draft.testing.queueCapacityPerRegion));}
-  else{const r=wizardResources(s.draft)[Number(action.slice(4))];if(!r)throw new UserError('Invalid resource.');const value=get(s.draft,r.path);field('ids',r.array?'Role/category IDs, comma separated':'Existing resource ID; blank creates one',Array.isArray(value)?value.join(','):String(value??''),1000,false);}
+  else{const r=wizardResources(s.draft)[Number(action.slice(4))];if(!r)throw new UserError('Invalid resource.');const value=get(s.draft,r.path);field('ids',r.path==='restriction.roleId'?'Restricted role ID; blank disables sync':r.array?'Role/category IDs, comma separated':'Existing resource ID; blank creates one',Array.isArray(value)?value.join(','):String(value??''),1000,false);}
   return modal;
 }
