@@ -107,3 +107,15 @@ test('resetcooldown command accepts CD Resetter alone without granting other adm
  const health=interaction('command','health');await f.runtime.interact(health.i);assert(JSON.stringify(health.calls).includes('permission'));
  }finally{await rm(f.dir,{recursive:true});}
 });
+
+test('allcdreset is owner-only and changes cooldowns only after confirmation',async()=>{const f=await harness(true);try{
+ f.file.value.permissionGroups.owner=[CATEGORY];f.setActor({id:USER,roles:[ROLE],administrator:true,channelAccess:true});const denied=interaction('command','allcdreset');await f.runtime.interact(denied.i);assert(JSON.stringify(denied.calls).includes('permission'));
+ f.setActor({id:USER,roles:[CATEGORY],administrator:false,channelAccess:true});await f.store.change(s=>{s.maintenance=false;s.players[USER]={id:USER,tier:'HT3',uuid:null,ign:null,region:'NA',preferredServer:null,waitlist:false,cooldownUntil:Date.now()+999999};});const start=interaction('command','allcdreset');await f.runtime.interact(start.i);assert((await f.store.read()).players[USER]!.cooldownUntil>0);const id=customIds(start.calls).find(id=>id.startsWith('confirm:'))!;assert(id);await f.runtime.interact(interaction('button',id).i);assert.equal((await f.store.read()).players[USER]!.cooldownUntil,0);
+}finally{await rm(f.dir,{recursive:true});}});
+
+test('high-test purge previews without deleting and queues saved background work only on owner confirmation',async()=>{const f=await harness(true);try{
+ f.file.value.backups.directory=join(f.dir,'backups');await f.store.change(s=>{s.maintenance=false;});const ch='100000000000000099';const internals=f.runtime as unknown as {gateway:{guild:()=>Promise<unknown>}};internals.gateway.guild=async()=>({channels:{fetch:async()=>new Collection([[ch,{id:ch,name:'legacy-ht3-eu',parentId:CATEGORY,type:ChannelType.GuildText}]])}});
+ const preview=interaction('command','purgehightests',{sub:'start'});(preview.i as unknown as {options:{getString:()=>string}}).options.getString=()=> 'High-test cleanup';await f.runtime.interact(preview.i);assert.equal(Object.keys((await f.store.read()).jobs).length,0);assert(JSON.stringify(preview.calls).includes('1 high-test channels'));const confirmId=customIds(preview.calls).find(id=>id.startsWith('confirm:'))!;assert(confirmId);
+ await f.runtime.interact(interaction('button',confirmId).i);const saved=await f.store.read();assert.equal(Object.values(saved.jobs).filter(j=>j.kind==='archive').length,1);assert.equal(Object.values(saved.jobs).filter(j=>j.data.event==='high-test-purge').length,1);const status=interaction('command','purgehightests',{sub:'status'});await f.runtime.interact(status.i);assert(JSON.stringify(status.calls).includes('0/1 archived'));
+ f.file.value.permissionGroups.owner=[CATEGORY];f.setActor({id:USER,roles:[ROLE],administrator:true,channelAccess:true});const denied=interaction('command','purgehightests',{sub:'start'});await f.runtime.interact(denied.i);assert(JSON.stringify(denied.calls).includes('permission'));
+}finally{await rm(f.dir,{recursive:true});}});

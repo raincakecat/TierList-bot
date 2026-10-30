@@ -197,3 +197,14 @@ test('zero extra closure delay deletes immediately after confirmed archive uploa
  await f.store.change(s=>s.tickets[f.t.id]!.minimumDeletionDelaySeconds=0);const j=job('archive',f.t);await f.gateway.job(j,async(k,v)=>{j.checkpoints[k]=v;});assert(j.checkpoints.archived);assert.equal(f.source.isDeleted(),true);assert.equal(f.archive.sent.length,1);
  }finally{await rm(f.dir,{recursive:true});}
 });
+
+test('legacy purge channels save and upload transcripts before deletion and recover after upload failure',async()=>{const f=await setup();try{
+ const snapshot={...f.t,id:'33333333-3333-4333-8333-333333333333',type:'legacy-high-test',minimumDeletionDelaySeconds:0};const j=job('archive',snapshot);j.data={channelId:SOURCE,archiveOnlyTicket:snapshot,actor:BOT,reason:'Owner purge',bulk:true};const save=async(k:string,v:unknown)=>{j.checkpoints[k]=v;};const send=f.archive.channel.send;f.archive.channel.send=async()=>{throw Error('Upload failed');};await assert.rejects(f.gateway.job(j,save),/Upload failed/);assert.equal(f.source.isDeleted(),false);assert(j.checkpoints.transcript);assert.equal(j.checkpoints.closed,undefined);
+ f.archive.channel.send=send;const recovered=new Gateway(f.client,f.store,()=>f.c);await recovered.job(j,save);assert.equal(f.source.isDeleted(),true);assert(j.checkpoints.archived);assert.equal(j.checkpoints.closed,true);assert.equal((await f.store.read()).tickets[snapshot.id],undefined);const files=f.archive.sent[0]!.files!;assert.equal(files.length,1);assert((await readFile(join(f.dir,snapshot.id,'transcript.md'),'utf8')).includes('Owner purge'));
+ await recovered.job(j,save);assert.equal(f.archive.sent.length,1);
+}finally{await rm(f.dir,{recursive:true});}});
+
+test('purge completion waits for saved child archives and never reports a failed upload as complete',async()=>{const f=await setup();try{
+ const batch=job('notice',f.t);batch.data={event:'high-test-purge',archiveJobs:['child'],reportChannelId:ARCHIVE};await f.store.change(s=>{s.jobs[batch.id]=batch;s.jobs.child={...job('archive',f.t),id:'child',status:'pending'};});const save=async(k:string,v:unknown)=>{batch.checkpoints[k]=v;};await assert.rejects(f.gateway.job(batch,save),/Waiting for saved high-test archives/);assert.equal(f.archive.sent.length,0);
+ await f.store.change(s=>{s.jobs.child!.status='done';s.jobs.child!.checkpoints.closed=true;});await f.gateway.job(batch,save);assert(f.archive.sent[0]!.content!.includes('1/1 channels archived and deleted'));assert.deepEqual(f.archive.sent[0]!.allowedMentions,{parse:[]});
+}finally{await rm(f.dir,{recursive:true});}});

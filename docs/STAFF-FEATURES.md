@@ -100,7 +100,7 @@ The migration tools can keep ranks, linked accounts, supported testing history, 
 We’ll need the old data exported and prepared properly before moving it. There shouldn’t need to be a tier reset if the required records are available.
 
 **Where things stand**
-The current build is v0.2.0, with 169 automated tests passing and installation checks passed on Windows and Linux. Each installation still needs its own test-server run-through with the chosen database, role mappings and ticket permissions before cutover.
+The current build is v0.2.0, with 177 automated tests passing and installation checks passed on Windows and Linux. Each installation still needs its own test-server run-through with the chosen database, role mappings and ticket permissions before cutover.
 
 Which commands each person can use will depend on their assigned roles and which features we enable.
 

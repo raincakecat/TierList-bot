@@ -7,7 +7,7 @@ This package contains a configurable Discord bot for Crystal PvP account linking
 
 The full-package ZIP includes compiled JavaScript, TypeScript source, automated tests, pinned dependencies, configuration templates, SQL setup, launchers, and this guide. Node.js and downloaded dependencies are not bundled. Internet access is needed for installation and normal operation.
 
-Release status: 169 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite, and Supabase has been exercised live. This reusable package remains an implementation candidate: validate your own server permissions, hosting, remote database, and recovery flow in rehearsal. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
+Release status: 177 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite, and Supabase has been exercised live. This reusable package remains an implementation candidate: validate your own server permissions, hosting, remote database, and recovery flow in rehearsal. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
 
 Read the quick start for the shortest installation route. The later sections explain configuration, permissions, hosting, recovery, migration, and troubleshooting. Commands shown in this guide must be entered in the specified place: host terminal commands on the machine running the bot, and slash commands inside your Discord server.
 
@@ -487,7 +487,7 @@ https://supabase.com/docs/guides/database/postgres/row-level-security
 For exact local behavior, consult src/config.ts, src/domain/service.ts, src/discord/runtime.ts, and docs/STATUS.md. This guide documents the 0.2.0 candidate; repeat validation after changing code, dependencies, roles, or databases. Full command permissions are in docs/COMMANDS.txt; dedicated live checks are in docs/LIVE-REHEARSAL.md and docs/DATABASE-REHEARSAL.md. Measured local volume checks are in docs/LOAD-CHECKS.md.
 
 ---PAGE---
-# 16. October 28 updates and operations notes
+# 17. October 28 updates and operations notes
 
 Queue notifications: the first tester opening a regional queue posts one regional waitlist-role mention in its waitlist channel. It remains until the last tester stops, staff closes the queue, or testing is paused/disabled. The saved reference survives restart. Additional testers joining an already-open region do not send another ping.
 
@@ -508,3 +508,20 @@ Supabase stores large records in a compressed envelope and polls revisions inste
 For a single-host installation, SQLite removes remote database bandwidth dependence. The stopped-service scripts/move-to-local-sqlite.mjs --confirm utility validates and copies a Supabase source to a new data/lunar.sqlite, preserves a private source export and configuration, verifies the copy, then switches configuration. It refuses an active source lease or existing destination. Never run both backends as live writers. The retained source becomes historical; do not switch back without transferring newer local changes.
 
 Daily validated exports retain ten automatic backups. They depend on the bot running and do not protect against loss of the VM disk. Keep an independent disk/off-host backup, including configuration and evidence. Host moves do not erase prior remote usage charges.
+
+---PAGE---
+# 18. Owner bulk cleanup and cooldown resets
+
+/purgehightests start reason:YOUR_REASON previews high testing channels and asks for confirmation. Only Owners can start a purge or view its status. No tickets are deleted during preview. Confirmation saves a backup and a durable background batch; you do not need to keep the interaction open. Restarting the bot resumes saved archive jobs.
+
+The preview includes registered high testing tickets, even if renamed or placed in overflow. It also includes unregistered legacy channels whose names end with -ht3, -lt2, -ht2, -lt1, or -ht1, optionally followed by a supported region (including legacy AU), inside High Tests or configured/automatically created overflow categories. Normal evaluations, registered support tickets, and configured archive/panel channels are excluded. New tickets created after preview are not added automatically. Review any nonstandard legacy channel names separately.
+
+Every selected channel is locked, its complete Markdown transcript is saved on the host, and all transcript parts are uploaded to its archive channel before deletion. Legacy high-test transcripts go to the configured testing archive. A failed upload keeps the source channel for retry. Large queues run with limited background concurrency so normal commands can continue. Discord rate limits can make a large purge take time.
+
+/purgehightests status shows the latest saved batch ID, archived/deleted count, pending count, and retries. The operational log receives completion after all selected channels finish. Failed or inaccessible channels remain pending; resolve permissions or upload failures, then saved work retries. Maintenance pauses deletion.
+
+Administrative purge does not award tester credit, assign ranks, or change cooldowns. Current ranks and cooldowns remain saved, including interim ranks. The command archives and closes tickets rather than completing their tests. Only one unfinished purge may run at a time.
+
+/allcdreset is an Owner-only alias for the existing global cooldown reset. It asks for confirmation, then clears every saved player's cooldown. The CD Resetter role only grants individual resets and cannot use this command. Ranks, account links and restrictions are unchanged.
+
+Testers may join queues as normal players. They must verify, press Enter Waitlist, and then Join Queue for their saved region. They still need an available regional tester and must meet the normal cooldown/restriction/open-ticket rules. A tester role alone does not enroll someone in the waitlist.

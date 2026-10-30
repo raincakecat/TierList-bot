@@ -49,3 +49,5 @@ test('CD Resetter can reset individual cooldowns without receiving cooldown edit
  await f.service.cooldown(admin,P1,2);await f.service.resetCooldown(admin,P1);assert.equal((await f.store.read()).players[P1]!.cooldownUntil,0);
 });
 test('legacy configurations default the optional CD Resetter role to empty',()=>{const old=JSON.parse(JSON.stringify(template));delete old.permissionGroups.cdResetter;assert.deepEqual(configSchema.parse(old).permissionGroups.cdResetter,[]);});
+
+test('testers can enter the waitlist and join queues as ordinary players',async()=>{const f=await fixture();const testerPlayer={...actor(P1),roles:[ID]};await verify(f);await assert.rejects(f.service.join(testerPlayer,'NA'),/waitlist first/);await f.service.waitlist(testerPlayer);await f.service.start(admin,'NA');assert.equal(await f.service.join(testerPlayer,'NA'),1);assert.deepEqual((await f.store.read()).queues.NA,[P1]);});

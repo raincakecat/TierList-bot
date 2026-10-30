@@ -1,3 +1,4 @@
+import {highTestPurgePlan,queueHighTestPurge,purgeProgress} from '../domain/high-test-purge.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { join, basename } from 'node:path';
@@ -218,7 +219,18 @@ export class Runtime {
           case 'setcooldown':await this.service.cooldown(a,member(),o.getNumber('days',true));break;
           case 'reset':requireGroup(c,a,'owner');await this.confirm(i,a,`Reset <@${member()}>? Tier, account association, region, cooldown, queue, and lists will be cleared. Restrictions and archives remain.`,async()=>{await this.service.reset(a,member());return 'Player reset.';});return;
           case 'maintenance':await this.service.maintenance(a,o.getBoolean('enabled',true));break;
-          case 'forceresetcooldowns':requireGroup(c,a,'owner');await this.confirm(i,a,'Clear every player cooldown?',async()=>{await this.service.resetAllCooldowns(a);return 'All cooldowns cleared.';});return;
+          case 'allcdreset':case 'forceresetcooldowns':requireGroup(c,a,'owner');await this.confirm(i,a,'Clear every player cooldown?',async()=>{await this.service.resetAllCooldowns(a);return 'All cooldowns cleared.';});return;
+          case 'purgehightests':{
+            requireGroup(c,a,'owner');
+            if(o.getSubcommand()==='status'){const p=purgeProgress(await this.store.read(false));reply=`High-test purge ${p.id}: ${p.done}/${p.total} archived and deleted; ${p.pending} pending (${p.retrying} retrying). Archives must succeed before deletion.`;break;}
+            const guild=await this.gateway.guild(),channels=await guild.channels.fetch(),rows=[...channels.values()].filter((ch):ch is NonNullable<typeof ch>=>!!ch),plan=highTestPurgePlan(c,await this.store.read(false),rows);
+            if(!plan.length)throw new UserError('No high-test channels found.');
+            const reason=str('reason'),selected=new Set(plan.map(ch=>ch.id));
+            await this.confirm(i,a,`Archive and delete ${plan.length} high-test channels, including overflow (${plan.filter(ch=>!ch.ticketId).length} legacy/unregistered)? Support and normal evaluation tickets are excluded. Every transcript must be saved and uploaded before its channel is deleted. Current ranks/cooldowns stay unchanged; no tester credit is awarded. Reason: ${reason}`,async()=>{
+              await this.backups().create();const latest=await guild.channels.fetch(),fresh=highTestPurgePlan(c,await this.store.read(false),[...latest.values()].filter((ch):ch is NonNullable<typeof ch>=>!!ch)).filter(ch=>selected.has(ch.id));
+              const batch=await queueHighTestPurge(this.store,c,a,fresh,reason);return `High-test purge queued: ${batch.total} channels. Batch ${batch.id}. It runs in the background and resumes after restart. Use /purgehightests status for progress. Completion is posted in the operational log; transcripts go to the testing archives.`;
+            });return;
+          }
           case 'forceclosetickets':{requireGroup(c,a,'owner');const tickets=Object.values((await this.store.read()).tickets).filter(t=>t.status==='open');await this.confirm(i,a,`Discontinue and archive ${tickets.length} active tickets?`,async()=>{for(const t of tickets)await this.service.close({...a,channelAccess:true},t.id,'discontinued','Owner bulk closure');return 'Ticket closures queued.';});return;}
           case 'addtester':case 'stoptester':{requireGroup(c,a,'botAdmin');const guild=await this.gateway.guild(),m=await guild.members.fetch(member());if(name==='addtester'){await m.roles.add([...c.permissionGroups.verifiedTester,...c.permissionGroups.staff]);await this.store.change(s=>{player(s,m.id).testerSince??=Date.now();});}else{await m.roles.remove(c.permissionGroups.verifiedTester);await this.store.change(s=>{const r=s.testers[m.id];delete s.testers[m.id];if(r&&!Object.values(s.testers).includes(r))s.queues[r]=[];enqueue(s,'queues',{},Date.now());});}break;}
           case 'configquota':requireGroup(c,a,'botAdmin');{const next=structuredClone(c),n=o.getInteger('count',true);next.modules.testerQuotas=n>0;next.testing.monthlyTesterQuota=n||null;const errors=readiness(next);if(errors.length)throw new UserError(errors.join('\n'));await this.file.save(next);}break;

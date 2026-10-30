@@ -14,7 +14,7 @@
 
 ## Verified locally
 
-169 automated tests passed on Windows and Linux using Node 24.18.0. Automated tests cover real local SQLite and mocked Discord/Supabase transports, plus emulated PostgreSQL. The runtime has also been deployed with Discord, Supabase and SQLite, but that does not validate a new community's permissions or hosting. See UPDATES-2026-10-28.md for the current feature changes.
+177 automated tests passed on Windows and Linux using Node 24.18.0. Automated tests cover real local SQLite and mocked Discord/Supabase transports, plus emulated PostgreSQL. The runtime has also been deployed with Discord, Supabase and SQLite, but that does not validate a new community's permissions or hosting. See UPDATES-2026-10-28.md for the current feature changes.
 
 ## Required before calling the build production-ready
 

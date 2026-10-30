@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { paginateLines } from './pages.js';
 import { closeRequestPanel } from './close-request-panel.js';
 import { queuePanels } from './queue-panel.js';
+import {purgeProgress} from '../domain/high-test-purge.js';
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, PermissionFlagsBits, type Client, type Guild, type TextChannel, type MessageCreateOptions } from 'discord.js';
 import { render, type Config } from '../config.js';
 import { channelName, clearLists, enqueue, listTiers, removeQueue, restricted, tierName } from '../domain/service.js';
@@ -31,7 +32,7 @@ export class Gateway {
       case 'result':await this.result(job,ticket,state,checkpoint);break;
       case 'notice':await this.notice(job,ticket,checkpoint);break;
       case 'deadline':{const d=ticket?.deadline;if(ticket?.status==='open'&&d&&d.at===job.data.at&&d.setter===job.data.setter&&ticket.channelId)await this.sendOnce(await this.text(ticket.channelId),job,{content:`<@${d.setter}> ⏳ This ticket has reached its deadline. Please review it.`,allowedMentions:{users:[d.setter],parse:[]}},checkpoint);break;}
-      case 'archive':if(ticket)await this.archive(ticket,job,checkpoint);break;
+      case 'archive':{const target=ticket??job.data.archiveOnlyTicket as Ticket|undefined;if(target)await this.archive(target,job,checkpoint);break;}
       case 'loa':await new LeaveGateway(this.client,this.store,()=>this.config,this).job(job,checkpoint);await this.leavePanels();break;
     }
   }
@@ -100,6 +101,11 @@ export class Gateway {
     for(const emoji of ['👑','🥳','😱','😭','😂','💀'])await message.react(emoji);
   }
   private async notice(j:Job,t:Ticket|undefined,save:(k:string,v:unknown)=>Promise<void>){
+    if(j.data.event==='high-test-purge'){
+      const progress=purgeProgress(await this.store.read(false),j.id);
+      if(progress.pending)throw new JobDeferred(Date.now()+15_000,'Waiting for saved high-test archives');
+      await this.sendOnce(await this.text(String(j.data.reportChannelId)),j,{content:`High-test purge complete: ${progress.done}/${progress.total} channels archived and deleted. Batch ${j.id}. Transcripts are in the testing archives.`,allowedMentions:{parse:[]}},save);return;
+    }
     if(t?.status==='closed'||(t?.status==='closing'&&['access','rename','passeval','type','close-request'].includes(String(j.data.event))))return;const ch=await this.text(t?.channelId??String(j.data.channelId));
     if(j.data.event==='delete-transient'){try{await ch.messages.delete(String(j.data.messageId));}catch(error){if((error as {code?:number}).code!==10008)throw error;}return;}
     if(j.data.queueOpening||j.data.here){
@@ -210,9 +216,11 @@ export class Gateway {
     }
   }
   private async archive(t:Ticket,j:Job,save:(k:string,v:unknown)=>Promise<void>){
-    if(t.status==='closed')return;if(!t.channelId)throw new Error('Ticket has no channel');const guild=await this.guild();
+    const finished=async()=>{await this.store.change(s=>{if(s.tickets[t.id])s.tickets[t.id]!.status='closed';});await save('closed',true);};
+    if(j.checkpoints.closed)return;
+    if(t.status==='closed'){await save('closed',true);return;}if(!t.channelId)throw new Error('Ticket has no channel');const guild=await this.guild();
     const channel=await guild.channels.fetch(t.channelId).catch(error=>{if((error as {code?:number}).code===10003)return null;throw error;});
-    if(!channel){if(j.checkpoints.archived){await this.store.change(s=>s.tickets[t.id]!.status='closed');return;}throw new Error('Ticket channel missing before archival');}
+    if(!channel){if(j.checkpoints.archived){await finished();return;}throw new Error('Ticket channel missing before archival');}
     if(channel.type!==ChannelType.GuildText)throw new Error('Invalid ticket channel');
     if(!j.checkpoints.locked){
       let bulkLocked=false;
@@ -243,7 +251,7 @@ export class Gateway {
     if(!j.checkpoints.archived&&!localTranscript){
       const messages=[];let before:string|undefined;for(;;){const batch=await channel.messages.fetch({limit:100,before});messages.push(...batch.values());if(batch.size<100)break;before=batch.last()!.id;await save('lastPage',before);}
       messages.sort((a,b)=>a.createdTimestamp-b.createdTimestamp);
-      const s=await this.store.read(false);let text=`# Ticket ${t.name}\n\n${JSON.stringify({...t,closedBy:j.data.actor,reason:j.data.reason},null,2)}\n\n`;
+      const s=await this.store.read(false);let text=`# Ticket ${t.name}\n\n${JSON.stringify({...t,...(j.data.archiveOnlyTicket?{opener:null,originalOpenerUnknown:true,archiveOnly:true}:{}),closedBy:j.data.actor,reason:j.data.reason},null,2)}\n\n`;
       text+='## Management history\n'+s.audit.filter(e=>e.target===t.id||e.target.startsWith(`${t.id}:`)).map(e=>`${new Date(e.at).toISOString()} | ${e.actor} | ${e.action} | ${e.target}`).join('\n')+'\n\n## Messages\n';
       for(const m of messages){text+=`\n### ${new Date(m.createdTimestamp).toISOString()} — ${m.author.username} (${m.author.id})\n${m.content}\n`;for(const e of m.embeds)text+=`\n${e.title??''}\n${e.description??''}\n${e.fields.map(f=>`${f.name}: ${f.value}`).join('\n')}\n`;
         for(const a of m.attachments.values()){text+=`\nAttachment: ${a.name} ${a.url}\n`;if(t.copyImages&&a.contentType?.startsWith('image/')&&!a.contentType.includes('svg')){const u=new URL(a.url);if(u.protocol!=='https:'||!['cdn.discordapp.com','media.discordapp.net'].includes(u.hostname))throw new Error('Unrecognized attachment host');const filename=`image-${a.id}.bin`,file=join(dir,filename);try{await stat(file);}catch{if(a.size>25*1024*1024)throw new Error('Image is larger than supported evidence limit');const response=await fetch(u,{signal:AbortSignal.timeout(60_000),redirect:'error'});if(!response.ok||!response.body)throw new Error('Evidence image download failed');let length=0;const chunks:Uint8Array[]=[];for await(const chunk of response.body){length+=chunk.byteLength;if(length>25*1024*1024)throw new Error('Evidence image exceeds limit');chunks.push(chunk);}await writeFile(file+'.tmp',Buffer.concat(chunks),{mode:0o600});await rename(file+'.tmp',file);}text+=`Copied evidence: ${filename}\n`;}
@@ -264,7 +272,7 @@ export class Gateway {
     }
     const archivedAt=Number(j.checkpoints.archived),deleteAt=archivedAt+(t.minimumDeletionDelaySeconds??this.config.archival.minimumDeletionDelaySeconds)*1000;if(Date.now()<deleteAt)throw new JobDeferred(deleteAt,'Waiting for safe deletion delay');
     if((await this.store.read(false)).maintenance)throw new Error('Deletion paused during maintenance');
-    await channel.delete('Archived ticket');await this.store.change(s=>s.tickets[t.id]!.status='closed');
+    await channel.delete('Archived ticket');await finished();
   }
   async cleanupImages(){const state=await this.store.read(false),roots=new Set([this.config.archival.directory,...Object.values(state.tickets).map(t=>t.archiveDirectory).filter((x):x is string=>!!x)].map(p=>resolve(p)));for(const root of roots){
     await mkdir(root,{recursive:true,mode:0o700});for(const entry of await readdir(root,{withFileTypes:true})){if(!entry.isDirectory()||!/^[a-f0-9-]{36}$/.test(entry.name))continue;const dir=join(root,entry.name);const marker=await readFile(join(dir,'retention.json'),'utf8').catch(()=>null);if(!marker)continue;

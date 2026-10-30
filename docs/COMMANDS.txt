@@ -80,3 +80,8 @@ OWNER (initial setup allows Discord Administrator before initialization)
 /forceclosetickets - Discontinue/archive active open tickets.
 
 Wizard changes on initialized installations require maintenance. Drafts expire after 15 minutes and confirmations after 5 minutes. Database credentials and initial server ID remain on the host. Backup restore/transfer drain active work with a 30-second waiting limit and keep maintenance enabled.
+
+OWNER BULK OPERATIONS
+/purgehightests start reason:<text> — Preview and confirm archival/deletion of high-test channels, including recognized legacy and overflow tickets. Durable asynchronous work; transcripts must upload before deletion. Current ranks/cooldowns stay unchanged.
+/purgehightests status — View latest batch progress and retry count. Owner only.
+/allcdreset — Confirm and clear every saved cooldown. Owner only; CD Resetter/Bot Admin alone are not sufficient. Existing /forceresetcooldowns remains supported.
