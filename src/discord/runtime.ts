@@ -202,7 +202,7 @@ export class Runtime {
           case 'passeval':await this.service.pass(a,await ticket());reply='Evaluation passed. The ticket is moving to HT3 testing.';break;
           case 'skip':await this.service.close(a,await ticket(),'skipped');reply='This test will be archived and skipped.';break;
           case 'close':await this.service.close(a,await ticket(),str('tier') as Tier|'discontinued');reply='The ticket is closing. Archival must succeed before deletion.';break;
-          case 'forceclose':await this.service.forceClose(a,await ticket(),str('reason'));reply='Support ticket closure started. Its transcript must be saved before deletion.';break;
+          case 'ticketclose':case 'forceclose':await this.service.forceClose(a,await ticket(),str('reason'));reply='Support ticket closure started. Its transcript must be saved before deletion.';break;
           case 'requestclose':await this.service.requestClose(a,await ticket(),str('reason'),str('timeout'));reply='Closure request saved. The opener can accept or deny it; an unanswered request closes at its deadline.';break;
           case 'deadline':await this.service.deadline(a,await ticket(),o.getSubcommand()==='clear'?null:str('duration'));break;
           case 'add':{const guild=await this.gateway.guild(),m=await guild.members.fetch(member());await this.service.add(a,await ticket(),m.id,allowed(c,{...a,id:m.id,roles:[...m.roles.cache.keys()]},'verifiedTester'));break;}

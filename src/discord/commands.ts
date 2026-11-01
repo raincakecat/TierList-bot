@@ -13,6 +13,7 @@ export function commandDefinitions(){
     cmd('passeval','Pass this ticket’s evaluation'),cmd('skip','Skip this test before evaluation'),
     cmd('close','Complete this testing ticket').addStringOption(o=>rank(o).addChoices({name:'Test Discontinued',value:'discontinued'})),
     cmd('forceclose','Close this support ticket without opener approval').addStringOption(o=>o.setName('reason').setDescription('Reason for closing').setRequired(true).setMaxLength(1000)),
+    cmd('ticketclose','Force close this support ticket and save its transcript').addStringOption(o=>o.setName('reason').setDescription('Reason for closing').setRequired(true).setMaxLength(1000)),
     cmd('requestclose','Ask the ticket opener to approve closure').addStringOption(o=>o.setName('reason').setDescription('Reason for closing').setRequired(true).setMaxLength(1000)).addStringOption(o=>o.setName('timeout').setDescription('1h to 7d, for example 3h or 2d').setRequired(true)),
     cmd('format','Post a fight result template').addStringOption(rank),
     cmd('add','Add a member to this ticket').addUserOption(o=>o.setName('member').setDescription('Member').setRequired(true)),

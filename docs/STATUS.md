@@ -32,3 +32,5 @@ Use LIVE-REHEARSAL.md and DATABASE-REHEARSAL.md for the remaining live checks. C
 October 31: 178 tests pass after adding fight-template progression and placeholder-count coverage. The current generator uses highest-to-lowest order; existing forwarded messages are not rewritten.
 
 November 1: 183 tests pass. Missing permission-role diagnostics are scoped to testing, LOA and specific support request dependencies; global channel/permission validation and authorization checks remain enforced.
+
+November 1: 184 tests pass, including both /ticketclose and /forceclose support closure routes. Both use the same permission and archival checks.

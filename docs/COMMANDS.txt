@@ -21,6 +21,7 @@ STAFF
 /add member /remove member - Manage added participants.
 /rename name - Rename current ticket.
 /forceclose reason - Immediately close the current support ticket without opener approval. Responsible closing staff or Owner only; required reason; transcript archival still precedes deletion. Testing tickets use /close instead.
+/ticketclose reason - Alias for /forceclose with the same support-only closing permissions and transcript protection.
 /requestclose reason timeout - Responsible closing staff (Staff for testing) or Owner can request closure for 1h-7d. Only the opener approves or denies. Approval or unanswered expiry closes through archival; denial keeps it open. Testing closure discontinues without test credit.
 /addht3 /addlt2 - Select eligible regional opponent.
 /set-ticket type member [tester] - Adopt existing channel.

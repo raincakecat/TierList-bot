@@ -6,7 +6,7 @@ Version 0.2.0 adds staff Leave of Absence requests, approval controls, timed rol
 
 **Full package:** [Download the ZIP with compiled files and PDF setup guide](full-package/full-package.zip), or [read the PDF guide](docs/Full-Setup-Guide.pdf).
 
-**Status:** 183 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite; Supabase has also been exercised live. This reusable package remains an implementation candidate: rehearse your own roles, channels, database, and recovery procedures before cutover. See `docs/STATUS.md`.
+**Status:** 184 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite; Supabase has also been exercised live. This reusable package remains an implementation candidate: rehearse your own roles, channels, database, and recovery procedures before cutover. See `docs/STATUS.md`.
 
 ## Install the ready-to-run ZIP
 
@@ -115,3 +115,5 @@ Owner bulk tools: `/purgehightests start reason:...` previews and confirms a dur
 Fight template sections run from highest tier to lowest; see [format ordering](docs/FIGHT-TEMPLATES.md).
 
 Missing permission roles now block only the request flows that need them; unrelated missing staff roles no longer stop testing. See [request readiness](docs/REQUEST-READINESS.md). Other configuration/permission failures still block requests.
+
+`/ticketclose reason:...` force-closes the current support ticket as an alias for `/forceclose`. Responsible closing staff or Owner authorization is required, and the transcript must save before channel deletion.
