@@ -6,7 +6,7 @@ Version 0.2.0 adds staff Leave of Absence requests, approval controls, timed rol
 
 **Full package:** [Download the ZIP with compiled files and PDF setup guide](full-package/full-package.zip), or [read the PDF guide](docs/Full-Setup-Guide.pdf).
 
-**Status:** 178 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite; Supabase has also been exercised live. This reusable package remains an implementation candidate: rehearse your own roles, channels, database, and recovery procedures before cutover. See `docs/STATUS.md`.
+**Status:** 183 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite; Supabase has also been exercised live. This reusable package remains an implementation candidate: rehearse your own roles, channels, database, and recovery procedures before cutover. See `docs/STATUS.md`.
 
 ## Install the ready-to-run ZIP
 
@@ -113,3 +113,5 @@ See [release notes](docs/UPDATES-2026-10-28.md) and [commands](docs/COMMANDS.txt
 Owner bulk tools: `/purgehightests start reason:...` previews and confirms a durable transcript-first purge, including overflow and recognized legacy high-test channels. `/purgehightests status` reports progress. `/allcdreset` confirms a global cooldown reset. Neither command is granted by Bot Admin or CD Resetter alone. Testers can join normal queues after verification and waitlist entry.
 
 Fight template sections run from highest tier to lowest; see [format ordering](docs/FIGHT-TEMPLATES.md).
+
+Missing permission roles now block only the request flows that need them; unrelated missing staff roles no longer stop testing. See [request readiness](docs/REQUEST-READINESS.md). Other configuration/permission failures still block requests.

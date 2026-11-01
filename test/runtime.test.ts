@@ -119,3 +119,15 @@ test('high-test purge previews without deleting and queues saved background work
  await f.runtime.interact(interaction('button',confirmId).i);const saved=await f.store.read();assert.equal(Object.values(saved.jobs).filter(j=>j.kind==='archive').length,1);assert.equal(Object.values(saved.jobs).filter(j=>j.data.event==='high-test-purge').length,1);const status=interaction('command','purgehightests',{sub:'status'});await f.runtime.interact(status.i);assert(JSON.stringify(status.calls).includes('0/1 archived'));
  f.file.value.permissionGroups.owner=[CATEGORY];f.setActor({id:USER,roles:[ROLE],administrator:true,channelAccess:true});const denied=interaction('command','purgehightests',{sub:'start'});await f.runtime.interact(denied.i);assert(JSON.stringify(denied.calls).includes('permission'));
 }finally{await rm(f.dir,{recursive:true});}});
+
+test('verification and waitlist remain usable with deleted unrelated staff role mappings',async()=>{const f=await harness(true);try{
+ f.file.value.modules.testing=true;const missing='100000000000000099';f.file.value.permissionGroups.restrictionKey=[missing];f.file.value.permissionGroups.partnershipManager=[missing];(f.runtime as unknown as {setupErrors:string[]}).setupErrors=[`Missing role ${missing}`];await f.store.change(s=>{s.maintenance=false;});
+ const verify=interaction('button','verify');await f.runtime.interact(verify.i);assert(verify.calls.some(c=>c.method==='modal'));
+ await f.store.change(s=>{s.players[USER]={id:USER,tier:'LT3',uuid:'a'.repeat(32),ign:'Player',region:'NA',preferredServer:'server',waitlist:false,cooldownUntil:0};});const waitlist=interaction('button','waitlist');await f.runtime.interact(waitlist.i);assert.equal((await f.store.read()).players[USER]!.waitlist,true);
+ await f.store.change(s=>{s.testers[ROLE]='NA';});const join=interaction('button','join:NA');await f.runtime.interact(join.i);assert.deepEqual((await f.store.read()).queues.NA,[USER]);
+}finally{await rm(f.dir,{recursive:true});}});
+
+test('verification still blocks a missing testing role and genuine bot permission failures',async()=>{const f=await harness(true);try{
+ f.file.value.modules.testing=true;await f.store.change(s=>s.maintenance=false);(f.runtime as unknown as {setupErrors:string[]}).setupErrors=[`Missing role ${ROLE}`];const missing=interaction('button','verify');await f.runtime.interact(missing.i);assert(!missing.calls.some(c=>c.method==='modal'));assert(JSON.stringify(missing.calls).includes('testing configuration'));
+ (f.runtime as unknown as {setupErrors:string[]}).setupErrors=['Bot needs Manage Channels and Manage Roles'];const permissions=interaction('button','verify');await f.runtime.interact(permissions.i);assert(!permissions.calls.some(c=>c.method==='modal'));
+}finally{await rm(f.dir,{recursive:true});}});

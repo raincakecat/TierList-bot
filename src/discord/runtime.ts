@@ -1,3 +1,4 @@
+import {requestSetupErrors} from './request-readiness.js';
 import {highTestPurgePlan,queueHighTestPurge,purgeProgress} from '../domain/high-test-purge.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { readFile, writeFile, rename } from 'node:fs/promises';
@@ -153,7 +154,7 @@ export class Runtime {
       if(i.isButton()&&i.customId==='verify'){
         if(i.channelId!==this.file.value.channels.verificationPanel)throw new UserError('Use the current request-test panel.');
         const p=(await this.store.read()).players[a.id],linked=p?alreadyVerified(this.file.value,p):null;if(linked){await i.reply({embeds:[linked],flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});return;}
-        if(this.setupErrors.length)throw new UserError('An administrator must finish configuration before new requests are accepted.');
+        if(requestSetupErrors(this.file.value,this.setupErrors,'testing').length)throw new UserError('An administrator must finish testing configuration before new requests are accepted.');
         if(!this.file.value.modules.testing)throw new UserError('Testing is disabled.');
         const modal=new ModalBuilder().setCustomId('verification').setTitle('Verify Minecraft Account');
         for(const [id,label,max]of [['ign','Minecraft username',16],['region','Region: NA, EU, or AS',2],['server','Preferred Minecraft server',100]] as const)modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(TextInputStyle.Short).setMaxLength(max).setRequired(true)));
@@ -166,7 +167,11 @@ export class Runtime {
       const publicStats=i.isChatInputCommand()&&['stats','testerstats','testerlb'].includes(i.commandName);if(publicStats)requireGroup(this.file.value,a,'staff');
       if(!i.deferred&&!i.replied)await i.deferReply(publicStats?{}:{flags:MessageFlags.Ephemeral});let reply='Done.';
       const createsRequest=(i.isButton()&&['waitlist','join','support'].includes(i.customId.split(':')[0]!))||(i.isStringSelectMenu()&&i.customId==='support')||(i.isModalSubmit()&&i.customId==='verification')||(i.isChatInputCommand()&&['start','next','forcetest','set-ticket','maketestticket'].includes(i.commandName));
-      if(createsRequest&&this.setupErrors.length)throw new UserError('An administrator must finish configuration before new requests are accepted.');
+      if(createsRequest){
+        const support=(i.isButton()&&i.customId.startsWith('support:'))||(i.isStringSelectMenu()&&i.customId==='support')||(i.isChatInputCommand()&&i.commandName==='set-ticket'&&i.options.getString('type')!=='test');
+        const key=i.isButton()?i.customId.split(':')[1]:i.isStringSelectMenu()?i.values[0]:i.isChatInputCommand()?i.options.getString('type')??undefined:undefined;
+        if(requestSetupErrors(this.file.value,this.setupErrors,support?'support':'testing',support?key:undefined).length)throw new UserError(`An administrator must finish ${support?'this support type’s':'testing'} configuration before new requests are accepted.`);
+      }
       if(i.isButton()){
         const [name,value]=i.customId.split(':');
         if(name==='confirm'||name==='cancel'){const pending=this.pending.get(value!);if(!pending||pending.actor!==a.id||pending.expires<Date.now())throw new UserError('This confirmation has expired.');if(name==='cancel'){this.pending.delete(value!);reply='Cancelled.';}else{
@@ -265,13 +270,13 @@ export class Runtime {
   private async leaveInteraction(i:Interaction,a:Actor):Promise<boolean>{
     if(!i.isRepliable()||!(i.isButton()||i.isModalSubmit())||!i.customId.startsWith('loa:'))return false;
     const [,action,id]=i.customId.split(':'),c=this.file.value;
-    if(i.isButton()&&action==='request'){requireGroup(c,a,'staff');if(i.channelId!==c.channels.requestLoa||!c.modules.loa)throw new UserError('Use the current Request LOA panel.');if(this.setupErrors.length)throw new UserError('Finish configuration before opening LOA requests.');
+    if(i.isButton()&&action==='request'){requireGroup(c,a,'staff');if(i.channelId!==c.channels.requestLoa||!c.modules.loa)throw new UserError('Use the current Request LOA panel.');if(requestSetupErrors(c,this.setupErrors,'loa').length)throw new UserError('Finish LOA configuration before opening LOA requests.');
       const s=await this.store.read();if(!s.initialized||s.maintenance)throw new UserError('LOA requests are temporarily unavailable.');if(currentLeave(s,a.id))throw new UserError('You already have a pending or active LOA.');const modal=new ModalBuilder().setCustomId('loa:submit').setTitle('Request Leave of Absence');
       for(const [key,label,max,style]of [['username','Your username',100,TextInputStyle.Short],['duration','Duration: 1d to 30d (example: 7d)',3,TextInputStyle.Short],['reason','Reason for leave',1000,TextInputStyle.Paragraph]] as const)modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId(key).setLabel(label).setStyle(style).setMaxLength(max).setRequired(true)));await i.showModal(modal);return true;
     }
     if(i.isButton()&&action==='deny'){requireGroup(c,a,'loaAdmin');const l=(await this.store.read()).leaves?.[id!];if(!l||l.status!=='pending'||i.channelId!==l.reviewChannelId)throw new UserError('This pending request is unavailable.');await i.showModal(new ModalBuilder().setCustomId(`loa:denial:${id}`).setTitle('Deny LOA Request').addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Required denial reason').setStyle(TextInputStyle.Paragraph).setMaxLength(1000).setRequired(true))));return true;}
     await i.deferReply({flags:MessageFlags.Ephemeral});
-    if(i.isModalSubmit()&&action==='submit'){if(i.channelId!==c.channels.requestLoa||this.setupErrors.length)throw new UserError('Use the configured Request LOA panel.');const l=await this.leave.request(a,i.fields.getTextInputValue('username'),i.fields.getTextInputValue('duration'),i.fields.getTextInputValue('reason'));await i.editReply({content:'LOA submitted for approval.',components:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`loa:withdraw:${l.id}`).setLabel('Withdraw Request').setStyle(ButtonStyle.Secondary))]});return true;}
+    if(i.isModalSubmit()&&action==='submit'){if(i.channelId!==c.channels.requestLoa||requestSetupErrors(c,this.setupErrors,'loa').length)throw new UserError('Use the configured Request LOA panel.');const l=await this.leave.request(a,i.fields.getTextInputValue('username'),i.fields.getTextInputValue('duration'),i.fields.getTextInputValue('reason'));await i.editReply({content:'LOA submitted for approval.',components:[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`loa:withdraw:${l.id}`).setLabel('Withdraw Request').setStyle(ButtonStyle.Secondary))]});return true;}
     if(action==='accept'||action==='denial'){requireGroup(c,a,'loaAdmin');const l=(await this.store.read()).leaves?.[id!];if(!l||i.channelId!==l.reviewChannelId)throw new UserError('Use the saved LOA review message.');let present=true;if(action==='accept'){try{await(await this.gateway.guild()).members.fetch({user:l.memberId,force:true});}catch(error){if((error as {code?:number}).code!==10007)throw error;present=false;}}await this.leave.decide(a,id!,action==='accept'?'accept':'deny',i.isModalSubmit()?i.fields.getTextInputValue('reason'):'',present);}
     else if(action==='withdraw')await this.leave.withdraw(a,id!);else if(action==='end')await this.leave.end(a,id!);else throw new UserError('Unknown LOA control.');await i.editReply({content:'LOA updated. Saved role/message/notification work is queued.',components:[],allowedMentions:{parse:[]}});return true;
   }
