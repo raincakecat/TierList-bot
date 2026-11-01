@@ -28,3 +28,5 @@
 This reusable release remains an implementation candidate. Do not stop an existing community bot until your own rehearsal passes. Private deployment settings, live member data and private reports are not part of this repository.
 
 Use LIVE-REHEARSAL.md and DATABASE-REHEARSAL.md for the remaining live checks. CI results should be reviewed separately from the local test results above.
+
+October 31: 178 tests pass after adding fight-template progression and placeholder-count coverage. The current generator uses prerequisite-to-target order; existing forwarded messages are not rewritten.

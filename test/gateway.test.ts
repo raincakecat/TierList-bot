@@ -208,3 +208,8 @@ test('purge completion waits for saved child archives and never reports a failed
  const batch=job('notice',f.t);batch.data={event:'high-test-purge',archiveJobs:['child'],reportChannelId:ARCHIVE};await f.store.change(s=>{s.jobs[batch.id]=batch;s.jobs.child={...job('archive',f.t),id:'child',status:'pending'};});const save=async(k:string,v:unknown)=>{batch.checkpoints[k]=v;};await assert.rejects(f.gateway.job(batch,save),/Waiting for saved high-test archives/);assert.equal(f.archive.sent.length,0);
  await f.store.change(s=>{s.jobs.child!.status='done';s.jobs.child!.checkpoints.closed=true;});await f.gateway.job(batch,save);assert(f.archive.sent[0]!.content!.includes('1/1 channels archived and deleted'));assert.deepEqual(f.archive.sent[0]!.allowedMentions,{parse:[]});
 }finally{await rm(f.dir,{recursive:true});}});
+
+test('fight templates follow the original progression order, from prerequisite to target tier',async()=>{const f=await setup();try{
+ const expected={HT3:['HT3'],LT2:['HT3','LT2'],HT2:['LT2','HT2'],LT1:['LT2','HT2','LT1'],HT1:['LT2','HT2','LT1','HT1']} as const;
+ for(const tier of Object.keys(expected) as (keyof typeof expected)[]){const content=f.gateway.fightTemplate(f.t,tier);assert.deepEqual([...content.matchAll(/__\*\*(HT\d|LT\d) Fights:\*\*__/g)].map(m=>m[1]),[...expected[tier]]);assert.equal(content.match(/Won\/Lost/g)!.length,expected[tier].length*(tier==='HT3'?1:2));}
+}finally{await rm(f.dir,{recursive:true});}});
