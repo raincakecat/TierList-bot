@@ -138,7 +138,7 @@ export class Gateway {
     if(j.data.event==='passeval'&&!j.checkpoints.template){const sub:Job={...j,id:j.id+'-template',checkpoints:{messageId:j.checkpoints.templateMessageId}};await this.sendOnce(ch,sub,{content:this.fightTemplate(t!,'HT3'),allowedMentions:{parse:[]}},async(k,v)=>{if(k==='messageId')await save('templateMessageId',v);});await save('template',true);}
   }
   fightTemplate(t:Ticket,tier:Tier):string {
-    const stages:Partial<Record<Tier,Tier[]>>={HT3:['HT3'],LT2:['HT3','LT2'],HT2:['LT2','HT2'],LT1:['LT2','HT2','LT1'],HT1:['LT2','HT2','LT1','HT1']};
+    const stages:Partial<Record<Tier,Tier[]>>={HT3:['HT3'],LT2:['LT2','HT3'],HT2:['HT2','LT2'],LT1:['LT1','HT2','LT2'],HT1:['HT1','LT1','HT2','LT2']};
     return `<@${t.opener}> - ${t.openingIgn??'Player'} - **Promoted to/Failed ${tierName(tier)}**\n\n${tier==='HT3'?'*Passed Evaluation*\n':''}${(stages[tier]??[tier]).map(stage=>`__**${stage} Fights:**__\n> Won/Lost 0-0 vs. (IGN)${tier==='HT3'?'':'\n> Won/Lost 0-0 vs. (IGN)'}`).join('\n\n')}`;
   }
   async sendOnce(ch:TextChannel,j:Job,options:MessageCreateOptions,save:(k:string,v:unknown)=>Promise<void>){

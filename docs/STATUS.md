@@ -29,4 +29,4 @@ This reusable release remains an implementation candidate. Do not stop an existi
 
 Use LIVE-REHEARSAL.md and DATABASE-REHEARSAL.md for the remaining live checks. CI results should be reviewed separately from the local test results above.
 
-October 31: 178 tests pass after adding fight-template progression and placeholder-count coverage. The current generator uses prerequisite-to-target order; existing forwarded messages are not rewritten.
+October 31: 178 tests pass after adding fight-template progression and placeholder-count coverage. The current generator uses highest-to-lowest order; existing forwarded messages are not rewritten.

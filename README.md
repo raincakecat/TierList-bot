@@ -112,4 +112,4 @@ See [release notes](docs/UPDATES-2026-10-28.md) and [commands](docs/COMMANDS.txt
 
 Owner bulk tools: `/purgehightests start reason:...` previews and confirms a durable transcript-first purge, including overflow and recognized legacy high-test channels. `/purgehightests status` reports progress. `/allcdreset` confirms a global cooldown reset. Neither command is granted by Bot Admin or CD Resetter alone. Testers can join normal queues after verification and waitlist entry.
 
-Fight template sections follow prerequisite-to-target progression; see [format ordering](docs/FIGHT-TEMPLATES.md).
+Fight template sections run from highest tier to lowest; see [format ordering](docs/FIGHT-TEMPLATES.md).

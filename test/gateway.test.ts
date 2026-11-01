@@ -209,7 +209,7 @@ test('purge completion waits for saved child archives and never reports a failed
  await f.store.change(s=>{s.jobs.child!.status='done';s.jobs.child!.checkpoints.closed=true;});await f.gateway.job(batch,save);assert(f.archive.sent[0]!.content!.includes('1/1 channels archived and deleted'));assert.deepEqual(f.archive.sent[0]!.allowedMentions,{parse:[]});
 }finally{await rm(f.dir,{recursive:true});}});
 
-test('fight templates follow the original progression order, from prerequisite to target tier',async()=>{const f=await setup();try{
- const expected={HT3:['HT3'],LT2:['HT3','LT2'],HT2:['LT2','HT2'],LT1:['LT2','HT2','LT1'],HT1:['LT2','HT2','LT1','HT1']} as const;
+test('fight templates order all sections from highest tier to lowest',async()=>{const f=await setup();try{
+ const expected={HT3:['HT3'],LT2:['LT2','HT3'],HT2:['HT2','LT2'],LT1:['LT1','HT2','LT2'],HT1:['HT1','LT1','HT2','LT2']} as const;
  for(const tier of Object.keys(expected) as (keyof typeof expected)[]){const content=f.gateway.fightTemplate(f.t,tier);assert.deepEqual([...content.matchAll(/__\*\*(HT\d|LT\d) Fights:\*\*__/g)].map(m=>m[1]),[...expected[tier]]);assert.equal(content.match(/Won\/Lost/g)!.length,expected[tier].length*(tier==='HT3'?1:2));}
 }finally{await rm(f.dir,{recursive:true});}});
