@@ -6,7 +6,7 @@ import {enqueue} from './service.js';
 import {UserError, type Actor, type State, type Ticket, type Tier} from './types.js';
 
 export interface PurgeChannel {id:string;name:string;parentId:string|null;type:number}
-export interface PurgeTarget extends PurgeChannel {ticketId?:string}
+export interface PurgeTarget extends PurgeChannel {ticketId?:string;modeId?:string}
 const highName= /-(ht3|lt2|ht2|lt1|ht1)(?:-(na|eu|as|au))?$/i;
 const high=(t:Ticket)=>t.type==='test'&&(!!t.target||t.passed);
 
@@ -15,8 +15,8 @@ export function highTestPurgePlan(c:Config,s:State,channels:PurgeChannel[]):Purg
   const protectedIds=new Set([...Object.values(c.channels),...Object.values(c.tierLists.channelIds),...c.supportTicketTypes.map(t=>t.archiveChannelId),...Object.values(c.regions).map(r=>r.queueChannelId)]);
   return channels.filter(ch=>ch.type===0&&!protectedIds.has(ch.id)).flatMap(ch=>{
     const known=Object.values(s.tickets).find(t=>t.channelId===ch.id&&t.status!=='closed');
-    if(known)return high(known)?[{...ch,ticketId:known.id}]:[];
-    return ch.parentId&&scope.has(ch.parentId)&&highName.test(ch.name)?[{...ch}]:[];
+    if(known)return high(known)&&(!c.activeMode||!known.modeId||known.modeId===c.activeMode.key)?[{...ch,ticketId:known.id,modeId:known.modeId??c.activeMode?.key}]:[];
+    return ch.parentId&&scope.has(ch.parentId)&&highName.test(ch.name)&&(!c.activeMode||ch.parentId===c.categories.highTests||ch.name.startsWith(c.activeMode.key+'-'))?[{...ch,modeId:c.activeMode?.key}]:[];
   });
 }
 
@@ -51,7 +51,7 @@ export async function queueHighTestPurge(store:Store,c:Config,a:Actor,plan:Purge
         const match=item.name.match(highName)!;
         t={id:randomUUID(),channelId:item.id,type:'legacy-high-test',opener:a.id,region:null,openingTier:'Unranked',openingIgn:null,tester:null,target:match[1]!.toUpperCase() as Tier,passed:false,status:'closing',participants:[],openedAt:now,closedAt:now,outcome:'discontinued',accessRoles:[],closingRoles:[],archiveChannelId:c.channels.testingArchives!,copyImages:false,imageRetentionDays:c.archival.imageRetentionDays,archiveDirectory:c.archival.directory,minimumDeletionDelaySeconds:c.archival.minimumDeletionDelaySeconds,categoryId:item.parentId!,name:item.name};
       }
-      const id=enqueue(s,'archive',{...(existing?{ticketId:t.id}:{channelId:item.id,archiveOnlyTicket:t}),actor:a.id,reason,purgeBatchId:batchId,bulk:true},now);archiveJobs.push(id);
+      const id=enqueue(s,'archive',{...(existing?{ticketId:t.id}:{channelId:item.id,archiveOnlyTicket:t}),modeId:existing?.modeId??item.modeId??s.defaultModeId??'crystal',actor:a.id,reason,purgeBatchId:batchId,bulk:true},now);archiveJobs.push(id);
     }
     if(!archiveJobs.length)throw new UserError('No matching high-test tickets remain. Nothing was queued.');
     enqueue(s,'notice',{event:'high-test-purge',actor:a.id,reason,archiveJobs,reportChannelId:c.channels.operationalLog,bulk:true},now,batchId);

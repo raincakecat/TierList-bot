@@ -43,3 +43,23 @@ Automated tests simulate Discord. Use an isolated server, separate bot applicati
 ## Record the result
 
 Record host/Node versions, selected database, configuration revision, scenario, expected/actual result, and evidence. Use private issue attachments for account data. Record any failures before planning community cutover. Remote database checks are separate; see DATABASE-REHEARSAL.md.
+
+
+## Requested closure and response latency
+- In a disposable support ticket, run `/requestclose reason:Resolved timeout:1h`. Confirm only the opener can answer; a different staff member or Owner cannot answer on their behalf.
+- Deny it and confirm the ticket stays open with disabled controls. A new request may then be submitted.
+- Approve a new request and confirm closure starts immediately, transcript archival succeeds, then the channel is removed.
+- Leave a 1h request unanswered, restart the bot, and verify automatic closure after expiry. Maintenance holds timeout processing until it is disabled.
+- Verify `/health` and ordinary slash commands acknowledge promptly even during slow remote reads. Full human Discord timing remains a separate live check from adapter benchmarks.
+
+
+## Queue availability and ticket priority
+- Start a regional session: the queue updates, records its actual start time, and sends only `@here`, which is deleted by saved cleanup work.
+- Stop the session: the last-session timestamp remains stable on the offline queue panel.
+- Open a ticket while another ticket archives. Confirm the new ticket can open independently and its opening message has no reference footer.
+- Restart gracefully during a test session and confirm it resumes promptly; test expired resume state separately in a disposable environment.
+- Interrupt a delivery after send but before checkpoint persistence, then verify recovery does not post it twice. Backups/recovery must wait for all detached workers.
+
+## Second-server multi-mode launch
+
+Follow the eight-step checklist in MULTI-SERVER.md. All second-server live checks remain pending until role hierarchy and category capacity permit complete setup. Do not treat the local SQLite load check as evidence of Discord API latency.

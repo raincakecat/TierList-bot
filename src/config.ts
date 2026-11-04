@@ -9,8 +9,12 @@ const group = z.enum(GROUPS);
 const color = z.string().regex(/^#[a-fA-F0-9]{6}$/);
 const duration = z.string().regex(/^(0|[1-9]\d*[mhd])$/).nullable();
 const regionSchema = z.object({enabled:z.boolean(),regionRoleId:id,waitlistRoleId:id,queueChannelId:id,testCategoryId:id}).strict();
+const modeSchema=z.object({key:z.string().regex(/^[a-z][a-z0-9-]{0,30}$/),name:z.string().min(1).max(60),testerRoleIds:ids.default([]),tierRoleIds:z.record(z.string(),id).default({}),regions:z.object({NA:regionSchema,EU:regionSchema,AS:regionSchema}),highTestsCategoryId:id,normalCooldown:duration,highCooldown:duration}).strict();
 export const configSchema = z.object({
   schemaVersion:z.literal(1),
+  gameModes:z.array(modeSchema).max(20).default([]),
+  activeMode:z.object({key:z.string(),name:z.string()}).optional(),
+  modeForum:z.object({enabled:z.boolean(),channelId:id,threadIds:z.record(z.string(),z.string()).default({})}).strict().default({enabled:false,channelId:null,threadIds:{}}),
   community:z.object({guildId:id,name:z.string().min(1).max(100),timezone:z.string().refine(v=>{try{new Intl.DateTimeFormat('en',{timeZone:v});return true;}catch{return false;}},'Invalid timezone')}).strict(),
   database:z.object({backend:z.enum(['supabase','postgresql','sqlite']),supabase:z.object({urlEnv:z.string().min(1),serviceKeyEnv:z.string().min(1)}),postgresql:z.object({connectionStringEnv:z.string().min(1)}),sqlite:z.object({file:z.string().min(1)})}).strict(),
   modules:z.object({testing:z.boolean(),supportTickets:z.boolean(),tierLists:z.boolean(),testerQuotas:z.boolean(),migration:z.boolean(),loa:z.boolean().default(false)}).strict(),
@@ -42,6 +46,7 @@ export function milliseconds(value:string):number {
 }
 export function readiness(c:Config):string[] {
   const errors:string[]=[];
+  if(new Set(c.gameModes.map(m=>m.key)).size!==c.gameModes.length)errors.push('Game mode keys must be unique');
   const need=(v:unknown,name:string)=>{if(v===null || (Array.isArray(v)&&!v.length))errors.push(`${name} is not configured`);};
   need(c.community.guildId,'community.guildId');need(c.permissionGroups.owner,'permissionGroups.owner');need(c.permissionGroups.botAdmin,'permissionGroups.botAdmin');
   for(const key of ['staffActionLog','operationalLog','botReview'] as const)need(c.channels[key],`channels.${key}`);
@@ -55,14 +60,15 @@ export function readiness(c:Config):string[] {
     for(const r of REGIONS)if(c.regions[r].enabled)for(const [key,v]of Object.entries(c.regions[r]))if(key!=='enabled')need(v,`regions.${r}.${key}`);
     for(const key of ['normalCooldown','highCooldown'] as const){need(c.testing[key],`testing.${key}`);if(c.testing[key]!==null)try{milliseconds(c.testing[key]);}catch(e){errors.push(`${key}: ${(e as Error).message}`);}}
   }
-  if(c.modules.tierLists)for(const [key,v]of Object.entries(c.tierLists.channelIds).filter(([key])=>key!=='HT1'))need(v,`tierLists.channelIds.${key}`);
+  if(c.modules.tierLists&&c.modeForum.enabled)need(c.modeForum.channelId,'modeForum.channelId');
+  if(c.modules.tierLists&&!c.modeForum.enabled)for(const [key,v]of Object.entries(c.tierLists.channelIds).filter(([key])=>key!=='HT1'))need(v,`tierLists.channelIds.${key}`);
   if(c.modules.testerQuotas){need(c.testing.monthlyTesterQuota,'testing.monthlyTesterQuota');need(c.channels.quotaReports,'channels.quotaReports');}
   if(c.modules.loa){need(c.permissionGroups.staff,'permissionGroups.staff');need(c.permissionGroups.loaAdmin,'permissionGroups.loaAdmin');need(c.loa.roleId,'loa.roleId');for(const key of ['requestLoa','loaInProgress','acceptedLoa'] as const)need(c.channels[key],`channels.${key}`);if(c.loa.roleId&&[...Object.values(c.permissionGroups).flat(),...Object.values(c.tierRoleIds),...REGIONS.flatMap(r=>[c.regions[r].regionRoleId,c.regions[r].waitlistRoleId])].includes(c.loa.roleId))errors.push('LOA role must be separate from permission, tier, region and waitlist roles');}
   if(c.modules.loa){const mapped=[c.channels.requestLoa,c.channels.loaInProgress,c.channels.acceptedLoa].filter(Boolean);if(new Set(mapped).size!==mapped.length)errors.push('LOA channels must be three separate channels');}
   if(c.restriction.roleId&&[...Object.values(c.permissionGroups).flat(),...Object.values(c.tierRoleIds),c.loa.roleId,...REGIONS.flatMap(r=>[c.regions[r].regionRoleId,c.regions[r].waitlistRoleId])].includes(c.restriction.roleId))errors.push('Restricted role must be separate from permission, tier, region, waitlist and LOA roles');
   if(c.modules.supportTickets){need(c.channels.supportPanel,'channels.supportPanel');for(const t of c.supportTicketTypes.filter(t=>t.enabled)){need(t.categoryId,`${t.key}.categoryId`);need(t.archiveChannelId,`${t.key}.archiveChannelId`);for(const g of [...t.accessGroups,...t.closingGroups,...t.openingPingGroups])need(c.permissionGroups[g],`permissionGroups.${g}`);}}
   const seen=new Set<string>();for(const t of c.supportTicketTypes){if(seen.has(t.key))errors.push(`Duplicate ticket type ${t.key}`);seen.add(t.key);}
-  const valid=new Set(['communityName','userMention','testerMention','minecraftIgn','discordUsername','region','previousRank','earnedRank','previousTest','preferredServer','deadline']);
+  const valid=new Set(['communityName','userMention','testerMention','minecraftIgn','discordUsername','region','previousRank','earnedRank','previousTest','preferredServer','deadline','gameMode']);
   for(const text of [...Object.values(c.templates),...c.supportTicketTypes.map(t=>t.openingMessage)])for(const m of text.matchAll(/\{([^{}]+)\}/g))if(!valid.has(m[1]!))errors.push(`Unknown template placeholder ${m[1]}`);
   return [...new Set(errors)];
 }

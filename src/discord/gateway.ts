@@ -1,3 +1,4 @@
+import {modeListPanels} from './mode-list.js';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -5,7 +6,7 @@ import { paginateLines } from './pages.js';
 import { closeRequestPanel } from './close-request-panel.js';
 import { queuePanels } from './queue-panel.js';
 import {purgeProgress} from '../domain/high-test-purge.js';
-import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, PermissionFlagsBits, type Client, type Guild, type TextChannel, type MessageCreateOptions } from 'discord.js';
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, PermissionFlagsBits, type Client, type Guild, type TextChannel, type ThreadChannel, type MessageCreateOptions } from 'discord.js';
 import { render, type Config } from '../config.js';
 import { channelName, clearLists, enqueue, listTiers, removeQueue, restricted, tierName } from '../domain/service.js';
 import { JobDeferred, REGIONS, type Job, type Player, type State, type Ticket, type Tier } from '../domain/types.js';
@@ -17,10 +18,11 @@ export class Gateway {
   public synchronizingRoles=new Set<string>();
   private panelCache=new Map<string,{payload:string;at:number}>();
   private panelTasks=new Map<string,Promise<void>>();
-  constructor(private client:Client,private store:Store,private getConfig:()=>Config,private onTicketChannel?:(ticketId:string,channelId:string)=>void){}
+  constructor(private client:Client,private store:Store,private getConfig:()=>Config,private onTicketChannel?:(ticketId:string,channelId:string)=>void,private guildStore:Store=store){}
   get config(){return this.getConfig();}
   async guild():Promise<Guild>{return this.client.guilds.fetch(this.config.community.guildId!);}
   private async member(guild:Guild,id:string){return guild.members.fetch({user:id,force:true}).catch(error=>{if([10007,10013].includes((error as {code:number}).code))return null;throw error;});}
+  private async messageChannel(id:string):Promise<TextChannel|ThreadChannel>{const guild=await this.guild(),ch=await guild.channels.fetch(id);if(!ch||(ch.type!==ChannelType.GuildText&&!ch.isThread()))throw Error('Message channel unavailable');return ch;}
   async text(id:string):Promise<TextChannel>{const guild=await this.guild(),ch=await guild.channels.fetch(id);if(!ch||ch.type!==ChannelType.GuildText)throw new Error('Configured text channel unavailable');return ch;}
   async job(job:Job,checkpoint:(key:string,value:unknown)=>Promise<void>):Promise<void>{
     const state=await this.store.read(false),ticket=job.data.ticketId?state.tickets[String(job.data.ticketId)]:undefined;
@@ -67,7 +69,7 @@ export class Gateway {
     const components:ActionRowBuilder<ButtonBuilder>[]=[];
     if(t.type==='test'){
       if(t.target)mentions.push(...(this.config.ticketNotifications.highTestingRoleIds??rolesFor(this.config,['staff'])));
-      embed.setTitle(render(this.config.templates.testOpeningTitle,values)).addFields({name:'User',value:`<@${t.opener}>`},...(t.tester?[{name:'Tester',value:`<@${t.tester}>`}]:[]),{name:'Region',value:t.region??'N/A'},{name:'Minecraft Username',value:t.openingIgn??'N/A'},{name:'Preferred Server',value:t.preferredServer??p.preferredServer??'N/A'},{name:'Previous Test',value:t.previousTestAt?`<t:${Math.floor(t.previousTestAt/1000)}:F>`:'N/A'});
+      embed.setTitle(render(this.config.templates.testOpeningTitle,values)).addFields(...(this.config.activeMode?[{name:'Game mode',value:this.config.activeMode.name}]:[]),{name:'User',value:`<@${t.opener}>`},...(t.tester?[{name:'Tester',value:`<@${t.tester}>`}]:[]),{name:'Region',value:t.region??'N/A'},{name:'Minecraft Username',value:t.openingIgn??'N/A'},{name:'Preferred Server',value:t.preferredServer??p.preferredServer??'N/A'},{name:'Previous Test',value:t.previousTestAt?`<t:${Math.floor(t.previousTestAt/1000)}:F>`:'N/A'});
       if(t.openingUuid??p.uuid)embed.setThumbnail(`https://visage.surgeplay.com/bust/128/${t.openingUuid??p.uuid}`);
     }else{
       const kind=this.config.supportTicketTypes.find(x=>x.key===t.type);embed.setTitle('Ticket Created').setDescription(render(kind?.openingMessage??'Welcome {userMention}! Please describe your request.',values));
@@ -78,9 +80,9 @@ export class Gateway {
     const silent=j.data.adopt&&j.data.silentAdoption;
     const message=await this.sendOnce(ch,j,{content,embeds:[embed],components,allowedMentions:{parse:[],users:silent?[]:[t.opener,...(t.tester?[t.tester]:[])],roles:silent?[]:mentions.filter(x=>x!==t.opener&&x!==t.tester)}},save);
     if(t.type!=='test')await message.pin('Ticket opening information');
-    await this.store.change(s=>{const saved=s.tickets[t.id]!;saved.status='open';removeQueue(s,t.opener);enqueue(s,'queues',{},Date.now());});
+    await this.store.change(s=>{const saved=s.tickets[t.id]!;saved.status='open';if(t.type==='test')removeQueue(s,t.opener);enqueue(s,'queues',{},Date.now());});
   }
-  private values(p:Player,t?:Ticket):Record<string,string>{return {communityName:this.config.community.name,userMention:`<@${p.id}>`,testerMention:t?.tester?`<@${t.tester}>`:'Unassigned',minecraftIgn:p.ign??'N/A',discordUsername:p.ign??p.id,region:p.region??'N/A',preferredServer:p.preferredServer??'N/A',previousRank:t?tierName(t.openingTier):tierName(p.tier),earnedRank:t?.outcome?tierName(t.outcome as Tier):tierName(p.tier),previousTest:t?tierName(t.openingTier):'N/A',deadline:'N/A'};}
+  private values(p:Player,t?:Ticket):Record<string,string>{return {communityName:this.config.community.name,gameMode:t?.modeName??this.config.activeMode?.name??'Crystal',userMention:`<@${p.id}>`,testerMention:t?.tester?`<@${t.tester}>`:'Unassigned',minecraftIgn:p.ign??'N/A',discordUsername:p.ign??p.id,region:p.region??'N/A',preferredServer:p.preferredServer??'N/A',previousRank:t?tierName(t.openingTier):tierName(p.tier),earnedRank:t?.outcome?tierName(t.outcome as Tier):tierName(p.tier),previousTest:t?tierName(t.openingTier):'N/A',deadline:'N/A'};}
   async playerRoles(p:Player,state?:State){
     const guild=await this.guild(),member=await this.member(guild,p.id);if(!member)return;
     const c=this.config,managed=[c.restriction.roleId,...Object.values(c.tierRoleIds),...REGIONS.flatMap(r=>[c.regions[r].regionRoleId,c.regions[r].waitlistRoleId])].filter((x):x is string=>!!x);
@@ -95,14 +97,15 @@ export class Gateway {
     const id=t?.opener??String(j.data.playerId),p=s.players[id]!;const guild=await this.guild(),member=await this.member(guild,id);
     const previous=t?.openingTier??j.data.previousTier as Tier,earned=t?.outcome??j.data.earnedTier??p.tier;
     const values=this.values(p,t);values.discordUsername=member?.user.username??p.ign??id;values.earnedRank=tierName(earned as Tier);values.previousRank=tierName(previous??'Unranked');
-    const embed=new EmbedBuilder().setTitle(render(this.config.templates.resultTitle,values)).setColor(this.config.branding.colors.result as `#${string}`).addFields({name:'Tester',value:t?.tester?`<@${t.tester}>`:`<@${String(j.data.actor)}>`},{name:'Region',value:String(t?.region??j.data.region??p.region??'N/A')},{name:'Username',value:t?.openingIgn??String(j.data.ign??p.ign??'N/A')},{name:'Previous Rank',value:values.previousRank!},{name:'Rank Earned',value:values.earnedRank!});
+    const mode=t?.modeName??this.config.activeMode?.name;const embed=new EmbedBuilder().setTitle((mode?`${mode} | `:'')+render(this.config.templates.resultTitle,values)).setColor(this.config.branding.colors.result as `#${string}`).addFields({name:'Tester',value:t?.tester?`<@${t.tester}>`:`<@${String(j.data.actor)}>`},{name:'Region',value:String(t?.region??j.data.region??p.region??'N/A')},{name:'Username',value:t?.openingIgn??String(j.data.ign??p.ign??'N/A')},{name:'Previous Rank',value:values.previousRank!},{name:'Rank Earned',value:values.earnedRank!});
+    if(mode)embed.addFields({name:'Game mode',value:mode});
     if(t?.openingUuid??p.uuid)embed.setThumbnail(`https://visage.surgeplay.com/bust/128/${t?.openingUuid??p.uuid}`);
     const message=await this.sendOnce(await this.text(this.config.channels.results!),j,{content:render(this.config.templates.resultAboveEmbed,values),embeds:[embed],allowedMentions:{users:[id],parse:[]}},save);
     for(const emoji of ['👑','🥳','😱','😭','😂','💀'])await message.react(emoji);
   }
   private async notice(j:Job,t:Ticket|undefined,save:(k:string,v:unknown)=>Promise<void>){
     if(j.data.event==='high-test-purge'){
-      const progress=purgeProgress(await this.store.read(false),j.id);
+      const progress=purgeProgress(await this.guildStore.read(false),j.id);
       if(progress.pending)throw new JobDeferred(Date.now()+15_000,'Waiting for saved high-test archives');
       await this.sendOnce(await this.text(String(j.data.reportChannelId)),j,{content:`High-test purge complete: ${progress.done}/${progress.total} channels archived and deleted. Batch ${j.id}. Transcripts are in the testing archives.`,allowedMentions:{parse:[]}},save);return;
     }
@@ -141,7 +144,7 @@ export class Gateway {
     const stages:Partial<Record<Tier,Tier[]>>={HT3:['HT3'],LT2:['LT2','HT3'],HT2:['HT2','LT2'],LT1:['LT1','HT2','LT2'],HT1:['HT1','LT1','HT2','LT2']};
     return `<@${t.opener}> - ${t.openingIgn??'Player'} - **Promoted to/Failed ${tierName(tier)}**\n\n${tier==='HT3'?'*Passed Evaluation*\n':''}${(stages[tier]??[tier]).map(stage=>`__**${stage} Fights:**__\n> Won/Lost 0-0 vs. (IGN)${tier==='HT3'?'':'\n> Won/Lost 0-0 vs. (IGN)'}`).join('\n\n')}`;
   }
-  async sendOnce(ch:TextChannel,j:Job,options:MessageCreateOptions,save:(k:string,v:unknown)=>Promise<void>){
+  async sendOnce(ch:TextChannel|ThreadChannel,j:Job,options:MessageCreateOptions,save:(k:string,v:unknown)=>Promise<void>){
     if(j.checkpoints.messageId){const found=await ch.messages.fetch(String(j.checkpoints.messageId)).catch((error:unknown)=>{if((error as {code?:number}).code===10008)return null;throw error;});if(found)return found;}
     const nonce=createHash('sha256').update(j.id).digest('hex').slice(0,24),reference=`Reference ${j.id}`;
     const fileNames=(options.files??[]).map(f=>typeof f==='string'?f.split(/[\\/]/).pop():(f as {name?:string}).name);
@@ -155,11 +158,11 @@ export class Gateway {
     }
     const message=await ch.send({...options,nonce,enforceNonce:true});await save('messageId',message.id);return message;
   }
-  private async upsertPanel(key:string,ch:TextChannel,options:MessageCreateOptions){
+  private async upsertPanel(key:string,ch:TextChannel|ThreadChannel,options:MessageCreateOptions){
     const task=(this.panelTasks.get(key)??Promise.resolve()).catch(()=>{}).then(()=>this.upsertPanelNow(key,ch,options));this.panelTasks.set(key,task);
     try{await task;}finally{if(this.panelTasks.get(key)===task)this.panelTasks.delete(key);}
   }
-  private async upsertPanelNow(key:string,ch:TextChannel,options:MessageCreateOptions){
+  private async upsertPanelNow(key:string,ch:TextChannel|ThreadChannel,options:MessageCreateOptions){
     const payload=JSON.stringify(options),cached=this.panelCache.get(key);if(cached?.payload===payload&&Date.now()-cached.at<60_000)return;
     const s=await this.store.read(false),old=s.panels[key];const found=old?await ch.messages.fetch(old).catch(error=>{if((error as {code:number}).code===10008)return null;throw error;}):null;
     if(found){await found.edit({content:options.content,embeds:options.embeds,components:options.components,allowedMentions:{parse:[]}});this.panelCache.set(key,{payload,at:Date.now()});return;}
@@ -188,7 +191,7 @@ export class Gateway {
   }
   private async removePanelPages(prefix:string,keep:Set<string>,channelId:string){
     const state=await this.store.read(false);for(const [key,id]of Object.entries(state.panels)){if(!(key===prefix||key.startsWith(prefix+':'))||keep.has(key))continue;
-      const channel=await this.text(channelId);let message;try{message=await channel.messages.fetch(id);}catch(error){if((error as {code?:number}).code!==10008)throw error;}
+      const channel=await this.messageChannel(channelId);let message;try{message=await channel.messages.fetch(id);}catch(error){if((error as {code?:number}).code!==10008)throw error;}
       if(message?.author.id===this.client.user!.id)await message.delete();
       await this.store.change(s=>{if(s.panels[key]===id)delete s.panels[key];});
     }
@@ -210,10 +213,27 @@ export class Gateway {
     await Promise.all(Array.from({length:Math.min(4,ids.length)},async()=>{while(cursor<ids.length){const id=ids[cursor++]!;try{const member=await guild.members.fetch({user:id,force:true});names.set(id,member.displayName??member.user.username??id);}catch(error){if((error as {code?:number}).code===10007)missing.add(id);else errors.push(error);}}}));
     if(errors.length)throw errors[0];
     if(missing.size)await this.store.change(s=>{for(const id of missing)clearLists(s,id);});
-    const state=await this.store.read(false);for(const tier of listTiers){const channelId=c.tierLists.channelIds[tier as keyof Config['tierLists']['channelIds']];if(!channelId)continue;
+    const state=await this.store.read(false);if(c.modeForum.enabled){await this.forumList(modeListPanels(c,state,names));return;}for(const tier of listTiers){const channelId=c.tierLists.channelIds[tier as keyof Config['tierLists']['channelIds']];if(!channelId)continue;
       const lines:string[]=[];for(const r of REGIONS)if(c.regions[r].enabled){const members=(state.lists[tier]?.[r]??[]).filter(id=>!missing.has(id)).map(id=>({id,name:names.get(id)??id}));members.sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id));lines.push(`**${r}**`,...(members.length?members.map(x=>`<@${x.id}>`):['No members listed']),'');}
       const chunks=paginateLines(lines),keep=new Set<string>();for(let page=0;page<chunks.length;page++){const key=`list:${tier}:${page}`;keep.add(key);await this.upsertPanel(key,await this.text(channelId),{embeds:[new EmbedBuilder().setTitle(`${tierName(tier)} List${page?` (${page+1})`:''}`).setDescription(chunks[page]!).setColor(c.branding.colors.panel as `#${string}`).setTimestamp()]});}await this.removePanelPages(`list:${tier}`,keep,channelId);
     }
+  }
+  private async forumList(pages:MessageCreateOptions[]){
+    const c=this.config,key=c.activeMode?.key??'crystal',guild=await this.guild(),forum=await guild.channels.fetch(c.modeForum.channelId!);
+    if(forum?.type!==ChannelType.GuildForum)throw Error('High Testing Lists forum unavailable');
+    const s=await this.store.read(false),saved=s.panels[`forum:${key}`]??c.modeForum.threadIds[key],name=`${c.activeMode?.name??'Crystal'} High List`;
+    let thread=saved?await guild.channels.fetch(saved).catch(e=>{if((e as {code:number}).code===10003)return null;throw e;}):null;
+    if(thread&&!thread.isThread())throw Error('Configured mode post is not a thread');
+    if(!thread){
+      thread=(await forum.threads.fetchActive()).threads.find(t=>t.name===name&&t.ownerId===this.client.user!.id)??null;
+      if(!thread){let before:Date|undefined;for(;;){const archived=await forum.threads.fetchArchived({limit:100,before});thread=archived.threads.find(t=>t.name===name&&t.ownerId===this.client.user!.id)??null;if(thread||!archived.hasMore)break;const last=archived.threads.last();if(!last?.archiveTimestamp)throw Error('Archived forum pagination unavailable');before=new Date(last.archiveTimestamp);}}
+      if(!thread){thread=await forum.threads.create({name,autoArchiveDuration:1440,message:{embeds:pages[0]!.embeds,allowedMentions:{parse:[]}}});const starter=await thread.fetchStarterMessage();if(starter)await this.store.change(s=>{s.panels[`mode-list:${key}:0`]=starter.id;});}
+      await this.store.change(s=>{s.panels[`forum:${key}`]=thread!.id;});
+    }
+    if(!thread.isThread()||thread.parentId!==forum.id)throw Error('Mode post belongs to another forum');
+    if(thread.archived){if(thread.locked)await thread.setLocked(false);await thread.setArchived(false);}
+    const keep=new Set<string>();for(let page=0;page<pages.length;page++){const panel=`mode-list:${key}:${page}`;keep.add(panel);await this.upsertPanel(panel,thread,pages[page]!);}
+    await this.removePanelPages(`mode-list:${key}`,keep,thread.id);
   }
   private async archive(t:Ticket,j:Job,save:(k:string,v:unknown)=>Promise<void>){
     const finished=async()=>{await this.store.change(s=>{if(s.tickets[t.id])s.tickets[t.id]!.status='closed';});await save('closed',true);};
@@ -296,9 +316,9 @@ function deliverySignature(content:string,embeds:readonly unknown[]):string {
   })]);
 }
 
-export function testingTicketName(t:Pick<Ticket,'target'|'region'|'opener'>,username:string):string {
+export function testingTicketName(t:Pick<Ticket,'target'|'region'|'opener'|'modeId'>,username:string):string {
   const clean=channelName(username).replace(/-+/g,'-').replace(/^-|-$/g,'')||t.opener;
-  return channelName(t.target?`${clean}-${t.target}-${t.region}`:`test-${clean}-${t.region}`);
+  const name=t.modeId&&t.modeId!=='crystal'?`${t.modeId}-${clean}`:clean;return channelName(t.target?`${name}-${t.target}-${t.region}`:`test-${name}-${t.region}`);
 }
 
 /** Keep every UTF-8 code point intact and remain below Discord's upload cap. */

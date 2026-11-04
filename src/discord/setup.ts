@@ -2,14 +2,34 @@ import { ChannelType, PermissionFlagsBits, type Guild } from 'discord.js';
 import { ConfigFile, readiness, type Config } from '../config.js';
 import { allowed, rolesFor } from '../domain/permissions.js';
 import { GROUPS, REGIONS } from '../domain/types.js';
+import {modeConfig} from '../modes.js';
+
+export function setupRequirements(c:Config){
+  const modes=c.gameModes.length?c.gameModes.map(m=>modeConfig(c,m.key)):[c];
+  let categories=c.modules.supportTickets?c.supportTicketTypes.filter(t=>t.enabled&&!t.categoryId).length:0;
+  let channels=Object.entries(c.channels).filter(([key,id])=>!id&&!(['requestLoa','loaInProgress','acceptedLoa'].includes(key)&&!c.modules.loa)&&!(key==='quotaReports'&&!c.modules.testerQuotas)&&!(key==='verificationPanel'&&!c.modules.testing)&&!(key==='supportPanel'&&!c.modules.supportTickets)).length;
+  let roles=GROUPS.filter(g=>g!=='verifiedTester'&&!c.permissionGroups[g].length).length+(c.modules.loa&&!c.loa.roleId?1:0);
+  if(c.modules.supportTickets)channels+=c.supportTicketTypes.filter(t=>t.enabled&&!t.archiveChannelId).length;
+  if(c.modules.tierLists)channels+=c.modeForum.enabled?Number(!c.modeForum.channelId):Object.entries(c.tierLists.channelIds).filter(([tier,id])=>tier!=='HT1'&&!id).length;
+  if(c.modules.testing){roles+=REGIONS.filter(r=>c.regions[r].enabled&&!c.regions[r].regionRoleId).length;for(const mode of modes){roles+=Number(!mode.permissionGroups.verifiedTester.length)+Object.values(mode.tierRoleIds).filter(id=>!id).length;categories+=Number(!mode.categories.highTests);for(const r of REGIONS)if(mode.regions[r].enabled){roles+=Number(!mode.regions[r].waitlistRoleId);channels+=Number(!mode.regions[r].queueChannelId);categories+=Number(!mode.regions[r].testCategoryId);}}}
+  return {categories,roles,channels:channels+categories};
+}
+export async function setupCapacity(c:Config,guild:Guild){
+  const [channels,roles]=await Promise.all([guild.channels.fetch(),guild.roles.fetch()]),needed=setupRequirements(c),errors:string[]=[];
+  const categories=channels.filter(ch=>ch?.type===ChannelType.GuildCategory).size;
+  if(categories+needed.categories>50)errors.push(`Setup needs ${needed.categories} more categories; ${categories} already exist (Discord limit: 50). Reuse or remove unused categories first.`);
+  if(channels.size+needed.channels>500)errors.push('Setup would exceed Discord’s 500-channel limit.');
+  if(roles.size+needed.roles>250)errors.push('Setup would exceed Discord’s 250-role limit.');
+  return errors;
+}
 
 export function setupPreview(c:Config):string {
-  const lines=['Setup will create missing resources, keep supplied IDs, and record each successful creation.'];
+  const lines=[...(c.activeMode?[`Game mode: ${c.activeMode.name}`]:[]),'Setup will create missing resources, keep supplied IDs, and record each successful creation.'];
   for(const g of GROUPS)if((g!=='loaAdmin'||c.modules.loa)&&!c.permissionGroups[g].length)lines.push(`Role: ${g}`);
-  if(c.modules.loa&&!c.loa.roleId)lines.push('Role: LOA');
+  if(c.modules.loa&&!c.loa.roleId)lines.push('Role: LOA');if(c.modules.tierLists&&c.modeForum.enabled&&!c.modeForum.channelId)lines.push('Forum: High Testing Lists (one post per mode)');
   if(c.modules.testing){for(const [tier,id]of Object.entries(c.tierRoleIds))if(!id)lines.push(`Role: ${tier}`);for(const r of REGIONS)if(c.regions[r].enabled){const v=c.regions[r];if(!v.regionRoleId)lines.push(`Role: ${r}`);if(!v.waitlistRoleId)lines.push(`Role: ${r} Waitlist`);if(!v.testCategoryId)lines.push(`Category: ${r} Testing (private)`);if(!v.queueChannelId)lines.push(`Channel: ${r} Queue (waitlist + staff)`);}if(!c.categories.highTests)lines.push('Category: High Tests (private)');}
   for(const [key,id]of Object.entries(c.channels))if(!id&&!(key==='requestLoa'||key==='loaInProgress'||key==='acceptedLoa'? !c.modules.loa:false)&&!(key==='quotaReports'&&!c.modules.testerQuotas)&&!(key==='verificationPanel'&&!c.modules.testing)&&!(key==='supportPanel'&&!c.modules.supportTickets))lines.push(`Channel: ${key}`);
-  if(c.modules.tierLists)for(const [tier,id]of Object.entries(c.tierLists.channelIds).filter(([tier])=>tier!=='HT1'))if(!id)lines.push(`Channel: ${tier} List`);
+  if(c.modules.tierLists&&!c.modeForum.enabled)for(const [tier,id]of Object.entries(c.tierLists.channelIds).filter(([tier])=>tier!=='HT1'))if(!id)lines.push(`Channel: ${tier} List`);
   if(c.modules.supportTickets)for(const t of c.supportTicketTypes.filter(t=>t.enabled)){if(!t.categoryId)lines.push(`Category: ${t.name} (type-based staff access)`);if(!t.archiveChannelId)lines.push(`Channel: ${t.name} Archives (type-based staff access)`);}
   lines.push('On first setup: assign the configured Owner role to the confirming administrator.');
   const unresolved=readiness(c).filter(e=>e.includes('Cooldown')||e.includes('monthlyTesterQuota'));if(unresolved.length)lines.push('Before enabling requests: '+unresolved.join('; '));return lines.join('\n');
@@ -21,16 +41,20 @@ export async function provision(file:ConfigFile,guild:Guild,actor:string,initial
   const access=(roles:string[],publicView=false)=>[{id:guild.id,deny:publicView?[PermissionFlagsBits.SendMessages]:[PermissionFlagsBits.ViewChannel]},{id:guild.members.me!.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.ManageChannels]},...roles.map(id=>({id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]}))];
   const category=async(name:string,roles:string[])=> (await guild.channels.create({name,type:ChannelType.GuildCategory,permissionOverwrites:access(roles)})).id;
   const channel=async(name:string,roles:string[],parent?:string,publicView=false)=> (await guild.channels.create({name:name.replace(/[A-Z]/g,m=>'-'+m.toLowerCase()).replace(/^-/,''),type:ChannelType.GuildText,parent,permissionOverwrites:access(roles,publicView)})).id;
-  for(const g of GROUPS)if(!c.permissionGroups[g].length){c.permissionGroups[g]=[await role(g==='loaAdmin'?'LOA Admin':g==='cdResetter'?'CD Resetter':g.replace(/([A-Z])/g,' $1'))];await save();}
+  for(const g of GROUPS)if(!c.permissionGroups[g].length){c.permissionGroups[g]=[await role(g==='verifiedTester'&&c.activeMode?`${c.activeMode.name} Tester`:g==='loaAdmin'?'LOA Admin':g==='cdResetter'?'CD Resetter':g.replace(/([A-Z])/g,' $1'))];await save();}
   if(c.modules.loa&&!c.loa.roleId){c.loa.roleId=await role('LOA');await save();}
   const owners=rolesFor(c,['owner']),admins=rolesFor(c,['owner','botAdmin']),staff=rolesFor(c,['owner','staff']);
-  if(c.modules.testing){for(const tier of Object.keys(c.tierRoleIds) as (keyof Config['tierRoleIds'])[])if(!c.tierRoleIds[tier]){c.tierRoleIds[tier]=await role(tier);await save();}
-    for(const r of REGIONS)if(c.regions[r].enabled){if(!c.regions[r].regionRoleId){c.regions[r].regionRoleId=await role(r);await save();}if(!c.regions[r].waitlistRoleId){c.regions[r].waitlistRoleId=await role(`${r} Waitlist`);await save();}const accessRoles=[...staff,c.regions[r].waitlistRoleId!];if(!c.regions[r].testCategoryId){c.regions[r].testCategoryId=await category(`${r} Testing`,accessRoles);await save();}if(!c.regions[r].queueChannelId){c.regions[r].queueChannelId=await channel(`${r.toLowerCase()}-queue`,accessRoles,c.regions[r].testCategoryId!);await save();}}
-    if(!c.categories.highTests){c.categories.highTests=await category('High Tests',staff);await save();}
+  if(c.modules.testing){for(const tier of Object.keys(c.tierRoleIds) as (keyof Config['tierRoleIds'])[])if(!c.tierRoleIds[tier]){c.tierRoleIds[tier]=await role(c.activeMode?`${c.activeMode.name} ${tier}`:tier);await save();}
+    for(const r of REGIONS)if(c.regions[r].enabled){if(!c.regions[r].regionRoleId){c.regions[r].regionRoleId=await role(r);await save();}if(!c.regions[r].waitlistRoleId){c.regions[r].waitlistRoleId=await role(`${c.activeMode?c.activeMode.name+' ':''}${r==='AS'&&c.activeMode?'AS/AU':r} Waitlist`);await save();}const accessRoles=[...staff,c.regions[r].waitlistRoleId!];if(!c.regions[r].testCategoryId){c.regions[r].testCategoryId=await category(`${c.activeMode?c.activeMode.name+' ':''}${r==='AS'&&c.activeMode?'AS/AU':r} Testing`,accessRoles);await save();}if(!c.regions[r].queueChannelId){c.regions[r].queueChannelId=await channel(c.activeMode?`${c.activeMode.key}-waitlist-${r.toLowerCase()}`:`${r.toLowerCase()}-queue`,accessRoles,c.regions[r].testCategoryId!);await save();}}
+    if(!c.categories.highTests){c.categories.highTests=await category(c.activeMode?`${c.activeMode.name} High Tests`:'High Tests',staff);await save();}
   }
   for(const key of Object.keys(c.channels) as (keyof Config['channels'])[]){if(c.channels[key]||(['requestLoa','loaInProgress','acceptedLoa'].includes(key)&&!c.modules.loa)||(key==='quotaReports'&&!c.modules.testerQuotas)||(key==='verificationPanel'&&!c.modules.testing)||(key==='supportPanel'&&!c.modules.supportTickets))continue;
     const isPublic=['verificationPanel','supportPanel','results'].includes(key);const r=key==='loaInProgress'?rolesFor(c,['owner','loaAdmin']):['requestLoa','acceptedLoa'].includes(key)?rolesFor(c,['owner','staff','loaAdmin']):['operationalLog','botReview'].includes(key)?admins:staff;const name=({requestLoa:'request-loa',loaInProgress:'loa-in-progress',acceptedLoa:'accepted-loa'} as Record<string,string>)[key]??key;c.channels[key]=await channel(name,r,undefined,isPublic);await save();}
-  if(c.modules.tierLists)for(const t of Object.keys(c.tierLists.channelIds) as (keyof Config['tierLists']['channelIds'])[])if(t!=='HT1'&&!c.tierLists.channelIds[t]){c.tierLists.channelIds[t]=await channel(`${t.toLowerCase()}-list`,owners,undefined,true);await save();}
+  if(c.modules.tierLists&&c.modeForum.enabled&&!c.modeForum.channelId){
+    const permissions=access(owners,true).map(o=>({...o,...(o.id===guild.id?{deny:[PermissionFlagsBits.SendMessages,PermissionFlagsBits.SendMessagesInThreads,PermissionFlagsBits.CreatePublicThreads]}:{allow:[...(o.allow??[]),PermissionFlagsBits.SendMessagesInThreads,PermissionFlagsBits.ManageThreads]})}));
+    c.modeForum.channelId=(await guild.channels.create({name:'high-testing-lists',type:ChannelType.GuildForum,permissionOverwrites:permissions})).id;await save();
+  }
+  if(c.modules.tierLists&&!c.modeForum.enabled)for(const t of Object.keys(c.tierLists.channelIds) as (keyof Config['tierLists']['channelIds'])[])if(t!=='HT1'&&!c.tierLists.channelIds[t]){c.tierLists.channelIds[t]=await channel(`${t.toLowerCase()}-list`,owners,undefined,true);await save();}
   if(c.modules.supportTickets)for(const key of c.supportTicketTypes.filter(t=>t.enabled).map(t=>t.key)){let t=c.supportTicketTypes.find(t=>t.key===key)!;const r=rolesFor(c,[...t.accessGroups,'owner']);if(!t.categoryId){t.categoryId=await category(t.name,r);await save();}t=c.supportTicketTypes.find(t=>t.key===key)!;if(!t.archiveChannelId){t.archiveChannelId=await channel(`${key}-archives`,r);await save();}}
   if(initial){const member=await guild.members.fetch(actor);if(!allowed(c,{id:actor,roles:[...(member.roles.cache?.keys()??[])],administrator:false},'owner'))await member.roles.add(c.permissionGroups.owner[0]!,'Confirmed first setup');}
   return c;
@@ -40,9 +64,10 @@ export async function validateDiscord(c:Config,guild:Guild):Promise<string[]>{
   const roleIds=[...(c.ticketNotifications.highTestingRoleIds??[]),...(c.ticketNotifications.supportRoleIds??[]),c.loa.roleId,c.restriction.roleId,...Object.values(c.permissionGroups).flat(),...Object.values(c.tierRoleIds),...REGIONS.filter(r=>c.regions[r].enabled).flatMap(r=>[c.regions[r].regionRoleId,c.regions[r].waitlistRoleId])].filter((x):x is string=>!!x);
   const managedRoleIds=new Set([c.loa.roleId,c.restriction.roleId,...c.permissionGroups.staff,...c.permissionGroups.verifiedTester,...Object.values(c.tierRoleIds),...REGIONS.filter(r=>c.regions[r].enabled).flatMap(r=>[c.regions[r].regionRoleId,c.regions[r].waitlistRoleId])].filter(Boolean));
   for(const id of new Set(roleIds)){const role=roles.get(id);if(!role)errors.push(`Missing role ${id}`);else if(role.managed||role.id===guild.id||(managedRoleIds.has(id)&&role.position>=me.roles.highest.position))errors.push(`Role ${role.name} must be assignable and below the bot role`);}
-  const textIds=[...Object.values(c.channels),...(c.modules.tierLists?Object.values(c.tierLists.channelIds):[]),...REGIONS.filter(r=>c.regions[r].enabled).map(r=>c.regions[r].queueChannelId),...c.supportTicketTypes.filter(t=>t.enabled).map(t=>t.archiveChannelId)].filter((x):x is string=>!!x);
+  const textIds=[...Object.values(c.channels),...(c.modules.tierLists&&!c.modeForum.enabled?Object.values(c.tierLists.channelIds):[]),...REGIONS.filter(r=>c.regions[r].enabled).map(r=>c.regions[r].queueChannelId),...c.supportTicketTypes.filter(t=>t.enabled).map(t=>t.archiveChannelId)].filter((x):x is string=>!!x);
   for(const id of new Set(textIds)){const ch=channels.get(id);if(!ch||ch.type!==ChannelType.GuildText)errors.push(`Missing text channel ${id}`);else if(!ch.permissionsFor(me).has([PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.AttachFiles,PermissionFlagsBits.EmbedLinks]))errors.push(`Missing read/send/archive permissions in ${ch.name}`);}
   for(const id of [c.categories.highTests,...c.categories.overflow,...REGIONS.filter(r=>c.regions[r].enabled).map(r=>c.regions[r].testCategoryId),...c.supportTicketTypes.filter(t=>t.enabled).map(t=>t.categoryId)].filter((x):x is string=>!!x))if(channels.get(id)?.type!==ChannelType.GuildCategory)errors.push(`Missing category ${id}`);
+  if(c.modules.tierLists&&c.modeForum.enabled){const forum=c.modeForum.channelId?channels.get(c.modeForum.channelId):null;if(forum?.type!==ChannelType.GuildForum)errors.push('High Testing Lists forum is missing');else if(!forum.permissionsFor(me)?.has([PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.SendMessagesInThreads,PermissionFlagsBits.ManageThreads]))errors.push('Bot needs forum posting and Manage Threads permissions');}
   if(c.modules.loa){for(const id of [c.channels.requestLoa,c.channels.loaInProgress,c.channels.acceptedLoa]){const ch=id?channels.get(id):null;if(ch?.type===ChannelType.GuildText&&guild.roles.everyone&&ch.permissionsFor(guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel))errors.push(`LOA channel ${ch.name} must not be visible to everyone`);}const review=c.channels.loaInProgress?channels.get(c.channels.loaInProgress):null;const allowed=new Set(rolesFor(c,['owner','loaAdmin']));if(review?.type===ChannelType.GuildText)for(const id of c.permissionGroups.staff){const role=roles.get(id);if(role&&!allowed.has(id)&&!role.permissions.has(PermissionFlagsBits.Administrator)&&review.permissionsFor(role)?.has(PermissionFlagsBits.ViewChannel))errors.push('LOA In Progress must be private to LOA Admins and Owners');}}
   if(!me.permissions.has([PermissionFlagsBits.ManageChannels,PermissionFlagsBits.ManageRoles]))errors.push('Bot needs Manage Channels and Manage Roles');return [...new Set(errors)];
 }

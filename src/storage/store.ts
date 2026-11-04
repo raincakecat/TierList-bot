@@ -39,10 +39,10 @@ export interface Adapter {
   releaseRuntimeLease?(owner:string):Promise<void>;
 }
 export class Store {
-  readonly operations=new Operations();
+  readonly operations:Operations;
   private committing=false;
   private pending:{apply:(state:State)=>unknown;resolve:(value:unknown)=>void;reject:(error:unknown)=>void}[]=[];
-  constructor(public adapter:Adapter){}
+  constructor(public adapter:Adapter,operations?:Operations){this.operations=operations??new Operations();}
   async read(includeLease=true):Promise<State>{const state=(await this.adapter.read()).state;if(includeLease&&this.adapter.readRuntimeLease){const lease=await this.adapter.readRuntimeLease();if(lease)state.runtimeLease=lease;}return state;}
   // Mutators are synchronous and side-effect free; a CAS conflict replays them.
   async change<T>(fn:(state:State)=>T):Promise<T>{

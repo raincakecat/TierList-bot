@@ -15,7 +15,7 @@ try{
   const manifest=strFromU8(entries['full-package/MANIFEST.sha256']);
   for(const line of manifest.trim().split('\n')){const [hash,path]=line.split('  ');if(!entries[`full-package/${path}`]||createHash('sha256').update(entries[`full-package/${path}`]).digest('hex')!==hash)throw Error('Manifest mismatch');}
   if(manifest.trim().split('\n').length!==Object.keys(entries).length-1)throw Error('Incomplete manifest');
-  const cwd=join(root,'full-package'),env={...process.env};delete env.DISCORD_TOKEN;delete env.BOT_CONFIG;
+  const cwd=join(root,'full-package'),env={...process.env};delete env.DISCORD_TOKEN;delete env.BOT_CONFIG;delete env.BOT_CONFIGS;
   const install=process.platform==='win32'?spawnSync('cmd.exe',['/d','/s','/c','npm ci --omit=dev --ignore-scripts'],{cwd,env,stdio:'inherit',timeout:120_000}):spawnSync('npm',['ci','--omit=dev','--ignore-scripts'],{cwd,env,stdio:'inherit',timeout:120_000});if(install.status!==0)throw Error('Clean installation failed');
   const c=JSON.parse(await readFile(join(cwd,'config.example.json'),'utf8'));c.community.guildId='100000000000000001';c.database.backend='sqlite';for(const k of Object.keys(c.modules))c.modules[k]=false;c.permissionGroups.owner=['100000000000000002'];c.permissionGroups.botAdmin=['100000000000000003'];for(const k of ['staffActionLog','operationalLog','botReview'])c.channels[k]='100000000000000004';
   await writeFile(join(cwd,'config.json'),JSON.stringify(c));

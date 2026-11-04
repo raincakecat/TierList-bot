@@ -525,3 +525,44 @@ Administrative purge does not award tester credit, assign ranks, or change coold
 /allcdreset is an Owner-only alias for the existing global cooldown reset. It asks for confirmation, then clears every saved player's cooldown. The CD Resetter role only grants individual resets and cannot use this command. Ranks, account links and restrictions are unchanged.
 
 Testers may join queues as normal players. They must verify, press Enter Waitlist, and then Join Queue for their saved region. They still need an available regional tester and must meet the normal cooldown/restriction/open-ticket rules. A tester role alone does not enroll someone in the waitlist.
+
+
+---PAGE---
+# 19. A second server with eight game modes
+
+This multi-mode update is an implementation candidate. Keep the new server in maintenance until its own live rehearsal passes. The existing Crystal configuration and records stay compatible.
+
+Copy config.multimode.example.json to a private host configuration file. Set the second server ID and use exactly the same database settings as Crystal. Keep Crystal first in BOT_CONFIGS and keep the existing database path. In the host environment file:
+
+```
+BOT_CONFIGS=["config.json","data/configs/other-modes.json"]
+```
+
+Invite the same bot to both servers. Move its role above Staff, Restricted, tier, regional, waitlist and LOA roles it assigns. Configure existing common roles and channels before setup. The private /setup wizard mode:Sword edits selected-mode resources and common community settings; /setup apply provisions missing resources for all modes. Every successful creation is saved so setup can continue after interruption.
+
+The layout needs 24 mode/region categories and eight High Tests categories, plus support resources and overflow space. Discord allows 50 categories, 250 roles and 500 total channels, including categories. Setup checks capacity before creation. Reuse or remove unused categories first if needed. Do not delete unrelated categories without reviewing their contents and permissions.
+
+The eight modes are Sword, Axe, SMP, Pot, Mace, UHC, Nethpot and Spear Mace. Each has NA, EU and AS/AU queues, separate tester and tier roles, ranks, cooldowns, waitlist membership, tests and history. AS is the stable internal key for Asia/Australia. CPV and subtiers are excluded.
+
+Players verify separately in the second server, choosing its region and preferred server. The Minecraft identity is shared across servers; conflicting account links are rejected atomically. Account lookup validates existence and does not prove ownership. Enter Waitlist offers a multi-select menu and reports success or eligibility problems per mode.
+
+/start mode:Sword region:NA requires Staff and Sword Tester. A tester may run one session per server, including Crystal and one second-server mode together. /next and /stop follow the saved session. Staff can handle and be assigned testing tickets without that mode's queue-opening role. Players may queue and have one active test in each of several modes simultaneously.
+
+Ticket commands infer mode from the registered ticket. Outside a clear ticket or queue context, specify mode for rank, cooldown, profile, list and related commands. Result messages share one channel in the second server and display the game mode. Opening queue notifications mention only the matching mode/region waitlist role until its queue closes.
+
+---PAGE---
+# 20. Multi-server lists, administration and recovery
+
+The High Testing Lists forum holds one bot-managed post per mode. Purple embeds group North America, Europe, then Asia/Australia. Within each region they show HT3, LT2, HT2, then LT1, alphabetically within each tier. HT3 remains manual; eligible higher-tier changes remain automatic. Continuation messages handle longer lists, stale pages are removed, and archived posts are reopened and reused. Crystal keeps its existing list channels.
+
+Restrictions block every mode in the invoking server and preserve each mode's rank for unrestriction. Support and LOA use that server's roles, channels and leave records. /allcdreset and bulk ticket closures remain scoped to the invoking server. /purgehightests start optionally accepts mode; omitting it covers every mode there, including registered overflow tickets. Transcripts must succeed before deletion.
+
+Bot Admin /unverify clears verification in the current server only. Owner /unverify scope:global asks for confirmation before removing shared account associations. Ranks and cooldowns remain. Open tests must finish before unlinking. A mode-specific /reset preserves shared verification and other mode ranks.
+
+/backup export saves every mode in the current server. Restore requires maintenance, waits for running work, clears active sessions and leaves maintenance enabled. It preserves other servers and rejects an account association conflicting with another server's current link. Keep complete host/database/configuration/evidence backups for disaster recovery as well as these server exports.
+
+/backup transfer copies the whole deployment, including both servers and shared associations, to an empty destination. Every server must be in maintenance. The destination configuration identifies the original primary server. After verification, stop the bot and update all configuration files to the new database together. Do not split the servers into independent writers and assume UUID uniqueness still spans them.
+
+Before launch, rehearse verification, conflicting UUID claims, two simultaneous mode queues/tests, tester-role permissions, results/reactions, restrictions, support and LOA. Check archived forum recovery and stale-page removal. Restart during saved role/archive work and verify correct server/mode routing without duplicate channels. Test a conflicting restore and confirm it leaves current data intact. Check /health and ticket/archive timing under load, then leave maintenance only after successful live checks.
+
+The repeatable local check is npm run build followed by node scripts/load-multimode.mjs. On the home Linux VM, 24 concurrent reservations across eight modes and three regions completed in 511 ms with no duplicates, using 300 player profiles. These are local state timings, not Discord API or archive-upload guarantees. The live second-server rehearsal is still required. See docs/MULTI-SERVER.md for the complete checklist. The future Minecraft mod/API is outside this update.

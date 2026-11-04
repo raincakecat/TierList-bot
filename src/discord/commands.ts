@@ -1,9 +1,10 @@
-import { SlashCommandBuilder, type SlashCommandStringOption } from 'discord.js';
+import type {Config} from '../config.js';
+import { SlashCommandBuilder, SlashCommandStringOption } from 'discord.js';
 import { REGIONS, TIERS } from '../domain/types.js';
 const regions=(o:SlashCommandStringOption)=>o.setName('region').setDescription('Region').setRequired(true).addChoices(...REGIONS.map(value=>({name:value,value})));
 const rank=(o:SlashCommandStringOption)=>o.setName('tier').setDescription('Tier').setRequired(true).addChoices(...TIERS.filter(t=>t!=='Unranked').map(value=>({name:value,value})));
 const cmd=(name:string,description:string)=>new SlashCommandBuilder().setName(name).setDescription(description).setContexts(0);
-export function commandDefinitions(){
+export function commandDefinitions(config?:Config){
   const commands=[
     cmd('loa','Leave of absence status and administration').addSubcommand(s=>s.setName('status').setDescription('View a saved LOA').addUserOption(o=>o.setName('member').setDescription('Staff member'))).addSubcommand(s=>s.setName('end').setDescription('End an active LOA as an LOA Admin').addUserOption(o=>o.setName('member').setDescription('Staff member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Required reason').setRequired(true).setMaxLength(1000))),
     cmd('health','View private database, job and backup health'),
@@ -20,7 +21,7 @@ export function commandDefinitions(){
     cmd('remove','Remove an added participant').addUserOption(o=>o.setName('member').setDescription('Member').setRequired(true)),
     cmd('rename','Rename this ticket').addStringOption(o=>o.setName('name').setDescription('New channel name').setRequired(true).setMaxLength(90)),
     cmd('addht3','Add an eligible regional HT3 opponent'),cmd('addlt2','Add an eligible regional LT2 opponent'),
-    cmd('unverify','Unlink an account without removing rank').addUserOption(o=>o.setName('member').setDescription('Player').setRequired(true)),
+    cmd('unverify','Unlink an account without removing rank').addUserOption(o=>o.setName('member').setDescription('Player').setRequired(true)).addStringOption(o=>o.setName('scope').setDescription('Current server, or both servers (Owner only)').addChoices({name:'Current server',value:'server'},{name:'Both servers (Owner only)',value:'global'})),
     cmd('uuid','Look up a Minecraft UUID').addStringOption(o=>o.setName('ign').setDescription('Minecraft username').setRequired(true).setMaxLength(16)),
     cmd('restrict','Restrict a Discord and Minecraft account pair').addUserOption(o=>o.setName('member').setDescription('Player').setRequired(true)).addStringOption(o=>o.setName('ign').setDescription('Minecraft username').setRequired(true).setMaxLength(16)).addStringOption(o=>o.setName('reason').setDescription('Reason').setRequired(true).setMaxLength(1000)).addStringOption(o=>o.setName('duration').setDescription('Optional duration, for example 7d')),
     cmd('unrestrict','Remove an account pair restriction').addUserOption(o=>o.setName('member').setDescription('Player').setRequired(true)),
@@ -50,5 +51,15 @@ export function commandDefinitions(){
   ];
   for(const name of ['forceresult','migrate']){const c=cmd(name,name==='migrate'?'Assign a migrated rank':'Force a rank assignment').addUserOption(o=>o.setName('member').setDescription('Player').setRequired(true)).addStringOption(rank).addStringOption(regions);if(name==='migrate')c.addStringOption(o=>o.setName('source').setDescription('Source community').setRequired(true));c.addStringOption(o=>o.setName('ign').setDescription('Required for an unverified player').setMaxLength(16));commands.push(c);}
   for(const tier of ['ht3','lt2','ht2','lt1'])commands.push(cmd(`${tier}list`,`${tier.toUpperCase()} list management`).addSubcommand(s=>s.setName('list').setDescription('View current members')).addSubcommand(s=>s.setName('add').setDescription('Add a member').addUserOption(o=>o.setName('member').setDescription('Player').setRequired(true)).addStringOption(regions)).addSubcommand(s=>s.setName('remove').setDescription('Remove a member').addUserOption(o=>o.setName('member').setDescription('Player').setRequired(true)).addStringOption(regions)));
-  return commands.map(c=>c.toJSON());
+  const rows=commands.map(c=>c.toJSON());
+  if(config&&config.gameModes.length>1){
+    const option=(required:boolean)=>new SlashCommandStringOption().setName('mode').setDescription('Game mode').setRequired(required).addChoices(...config.gameModes.map(m=>({name:m.name,value:m.key}))).toJSON();
+    const scoped=new Set(['start','leave','forcetest','forcestopqueue','forceresult','migrate','resetcooldown','setcooldown','configcooldown','profile','addtester','stoptester','reset','stats','testerstats','testerlb','maketestticket','set-ticket','changeticket']);
+    for(const row of rows){
+      if(scoped.has(row.name)){(row.options??=[]).push(option(row.name==='start'));row.options.sort((a,b)=>Number('required'in b&&b.required)-Number('required'in a&&a.required));}
+      if(/^(ht3|lt2|ht2|lt1)list$/.test(row.name))for(const sub of row.options??[])if(sub.type===1){(sub.options??=[]).push(option(false));sub.options.sort((a,b)=>Number('required'in b&&b.required)-Number('required'in a&&a.required));}
+      if(['setup','purgehightests'].includes(row.name))for(const sub of row.options??[])if(sub.type===1)(sub.options??=[]).push(option(false));
+    }
+  }
+  return rows;
 }

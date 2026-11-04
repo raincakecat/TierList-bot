@@ -15,7 +15,7 @@ export interface CloseRequest {
   status:'pending'|'accepted'|'denied'|'expired'|'cancelled'; resolvedAt?:number; messageId?:string;
 }
 export interface Ticket {
-  id: string; channelId: string | null; type: string; opener: string;
+  id: string; channelId: string | null; type: string; opener: string; modeId?:string; modeName?:string;
   region: Region | null; openingTier: Tier; openingIgn: string | null;
   tester: string | null; target: Tier | null; passed: boolean;
   status: 'opening'|'open'|'closing'|'closed'; participants: string[];
@@ -30,7 +30,7 @@ export interface Ticket {
   openingLists?: {tier:Tier;region:Region}[];
   deadline?: { at: number; setter: string; notified: boolean };
 }
-export interface Restriction { id: string; playerId: string; uuid: string; reason: string; until: number | null; actor: string; previousTier?:Tier }
+export interface Restriction { id: string; playerId: string; uuid: string; reason: string; until: number | null; actor: string; previousTier?:Tier; previousTiers?:Record<string,Tier> }
 export interface Job {
   id: string; kind: 'open'|'roles'|'archive'|'result'|'notice'|'lists'|'queues'|'deadline'|'loa';
   data: Record<string, unknown>; status: 'pending'|'working'|'done'; attempts: number;
@@ -47,11 +47,15 @@ export interface Leave {
   notifications?:Record<string,'sent'|'blocked'>;
 }
 export interface State {
+  servers?:Record<string,State>;
+  defaultModeId?:string;
+  modes?:Record<string,ModeState>;
+  testerModes?:Record<string,string>;
   version: 1; guildId: string; initialized: boolean; maintenance: boolean;
   players: Record<string, Player>; queues: Record<Region,string[]>;
   testers: Record<string,Region>; tickets: Record<string,Ticket>;
   restrictions: Restriction[]; lists: Partial<Record<Tier,Partial<Record<Region,string[]>>>>;
-  completions: {ticketId:string; tester:string; at:number}[];
+  completions: {ticketId:string; tester:string; at:number; modeId?:string}[];
   jobs: Record<string,Job>; panels: Record<string,string>;
   audit: {id:string; at:number; actor:string; action:string; target:string}[];
   lastTestingSession?:Partial<Record<Region,number>>;
@@ -72,3 +76,5 @@ export class UserError extends Error {}
 export class JobDeferred extends Error {
   constructor(public readonly retryAt:number,message:string){super(message);}
 }
+
+export interface ModeState {players:Record<string,Player>;queues:Record<Region,string[]>;lists:State['lists'];lastTestingSession?:Partial<Record<Region,number>>}

@@ -117,3 +117,7 @@ Fight template sections run from highest tier to lowest; see [format ordering](d
 Missing permission roles now block only the request flows that need them; unrelated missing staff roles no longer stop testing. See [request readiness](docs/REQUEST-READINESS.md). Other configuration/permission failures still block requests.
 
 `/ticketclose reason:...` force-closes the current support ticket as an alias for `/forceclose`. Responsible closing staff or Owner authorization is required, and the transcript must save before channel deletion.
+
+## Multiple servers and game modes
+
+The candidate supports a shared bot/database with isolated community and mode records. See [multi-server setup](docs/MULTI-SERVER.md) and `config.multimode.example.json`. Keep the new community in maintenance until live rehearsal passes.

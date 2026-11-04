@@ -86,3 +86,15 @@ OWNER BULK OPERATIONS
 /purgehightests start reason:<text> — Preview and confirm archival/deletion of high-test channels, including recognized legacy and overflow tickets. Durable asynchronous work; transcripts must upload before deletion. Current ranks/cooldowns stay unchanged.
 /purgehightests status — View latest batch progress and retry count. Owner only.
 /allcdreset — Confirm and clear every saved cooldown. Owner only; CD Resetter/Bot Admin alone are not sufficient. Existing /forceresetcooldowns remains supported.
+
+MULTI-MODE SERVER NOTES
+/start requires mode and region. /next and /stop use your active server session.
+Ticket commands infer mode; ambiguous rank/cooldown/list/profile commands require mode outside tickets.
+Queue opening: Staff + matching mode Tester role. Ticket handling/assignment: Staff.
+/unverify scope:server (default): Bot Admin; only current server.
+/unverify scope:global: Owner, confirmation required; shared unlink preserves ranks/cooldowns.
+/allcdreset and /forceclosetickets: Owner, all modes in current server only.
+/purgehightests start [mode]: Owner, optional mode narrows current-server purge.
+/setup wizard [mode]: Discord Administrator before initialization, Owner afterward.
+/backup export/restore: Owner, all current-server modes; restore rejects cross-server identity conflicts.
+/backup transfer: Owner, entire deployment, maintenance required in every server.

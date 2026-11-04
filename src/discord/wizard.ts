@@ -16,7 +16,8 @@ export function wizardResources(c:Config):Resource[]{
   add('loa.roleId','Role: LOA');
   add('restriction.roleId','Optional role: Restricted');
   add('categories.highTests','Category: High Tests');add('categories.overflow','Categories: Overflow',true);
-  for(const tier of Object.keys(c.tierLists.channelIds).filter(t=>t!=='HT1'))add(`tierLists.channelIds.${tier}`,`List channel: ${tier}`);
+  if(c.modeForum.enabled)add('modeForum.channelId','Forum: High Testing Lists');
+  if(!c.modeForum.enabled)for(const tier of Object.keys(c.tierLists.channelIds).filter(t=>t!=='HT1'))add(`tierLists.channelIds.${tier}`,`List channel: ${tier}`);
   c.supportTicketTypes.forEach((t,index)=>{add(`supportTicketTypes.${index}.categoryId`,`${t.name}: category`);add(`supportTicketTypes.${index}.archiveChannelId`,`${t.name}: archive`);});
   return out;
 }

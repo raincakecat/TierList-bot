@@ -13,10 +13,10 @@ export function queuePanels(c:Config,s:State,r:Region){
   const pages=paginateLines(lines);
   return pages.map((description,page)=>{
     const embed=new EmbedBuilder().setAuthor({name:c.community.name,...(c.branding.iconUrl?{iconURL:c.branding.iconUrl}:{})})
-      .setTitle((open?'Tester(s) Available!':s.maintenance?'Testing Paused':'No Testers Online')+(pages.length>1?` (${page+1}/${pages.length})`:''))
+      .setTitle((c.activeMode?`${c.activeMode.name} · ${r==='AS'?'AS/AU':r} — `:'')+(open?'Tester(s) Available!':s.maintenance?'Testing Paused':'No Testers Online')+(pages.length>1?` (${page+1}/${pages.length})`:''))
       .setDescription(description).setColor(c.branding.colors.panel as `#${string}`);
     if(!open)embed.addFields({name:'Last testing session',value:last?`<t:${Math.floor(last/1000)}:f>`:'Not recorded yet.'});
     return {embeds:[embed],components:open&&!page?[new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`join:${r}`).setLabel('Join Queue').setStyle(ButtonStyle.Primary))]:[]};
+      new ButtonBuilder().setCustomId(c.activeMode?`m:${c.activeMode.key}:join:${r}`:`join:${r}`).setLabel('Join Queue').setStyle(ButtonStyle.Primary))]:[]};
   });
 }

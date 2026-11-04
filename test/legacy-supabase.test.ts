@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { convertLegacySupabase } from '../src/storage/legacy-supabase.js';
-const guild='100000000000000099',member='100000000000000001';
+const guild='100000000000000009',member='100000000000000001';
 function fixture(){return {players:[{discord_id:member,username:'PlayerOne',uuid:'a'.repeat(32),rank:'High Tier 3',region:'AU',preferred_server:'Example',last_tested:1700000000}],
   cooldown_entries:[{user_id:member,start_time:1700000000000,duration:345600000}],tickets:[{channel_id:'100000000000000002',testee_id:member,type:'high'}],
   tester_quotas:[{tester_id:member,count:3,all_time_count:50}],quota_settings:[]};}

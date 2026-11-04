@@ -16,7 +16,7 @@ export function enqueue(s:State,kind:Job['kind'],data:Job['data'],now:number,id:
 export function restricted(s:State,p:Player,now:number):boolean{return s.restrictions.some(r=>(r.playerId===p.id||r.uuid===p.uuid)&&(r.until===null||r.until>now));}
 export function currentTicket(s:State,id:string):Ticket|undefined{return Object.values(s.tickets).find(t=>t.opener===id&&t.type==='test'&&t.status!=='closed');}
 export function removeQueue(s:State,id:string){for(const r of REGIONS)s.queues[r]=s.queues[r].filter(x=>x!==id);}
-export function clearLists(s:State,id:string){for(const tier of [...listTiers,'HT1'] as Tier[])for(const r of REGIONS)if(s.lists[tier]?.[r])s.lists[tier]![r]=s.lists[tier]![r]!.filter(x=>x!==id);}
+export function clearLists(s:Pick<State,'lists'>,id:string){for(const tier of [...listTiers,'HT1'] as Tier[])for(const r of REGIONS)if(s.lists[tier]?.[r])s.lists[tier]![r]=s.lists[tier]![r]!.filter(x=>x!==id);}
 export function syncLists(s:State,p:Player,now:number){clearLists(s,p.id);if(listTiers.includes(p.tier)&&TIERS.indexOf(p.tier)>=TIERS.indexOf('LT2')&&p.region&&p.uuid&&!restricted(s,p,now)){s.lists[p.tier]??={};(s.lists[p.tier]![p.region]??=[]).push(p.id);}}
 export function tierName(t:Tier):string{return t==='Unranked'?t:`${t[0]==='L'?'Low':'High'} Tier ${t[2]}`;}
 export function channelName(v:string):string{return v.toLowerCase().replace(/[^a-z0-9_-]/g,'-').slice(0,90)||'ticket';}
@@ -125,7 +125,7 @@ export class Service {
   async cooldown(a:Actor,id:string,days:number){requireGroup(this.config,a,'botAdmin');return this.writeCooldown(a,id,days);}
   private async writeCooldown(a:Actor,id:string,days:number){if(!Number.isFinite(days)||days<0||days>3650)throw new UserError('Invalid number of days.');return this.store.change(s=>{this.ensure(s);player(s,id).cooldownUntil=days?this.clock()+days*86_400_000:0;this.audit(s,a,'cooldown',id,this.clock());});}
   async maintenance(a:Actor,on:boolean){requireGroup(this.config,a,'owner');return this.store.change(s=>{s.maintenance=on;if(on)s.testers={};enqueue(s,'queues',{},this.clock());this.audit(s,a,'maintenance',String(on),this.clock());});}
-  async reset(a:Actor,id:string){requireGroup(this.config,a,'owner');return this.store.change(s=>{this.ensure(s);if(currentTicket(s,id))throw new UserError('Finish the existing test first.');delete s.players[id];const p=player(s,id);removeQueue(s,id);clearLists(s,id);this.jobs(s,p,this.clock());this.audit(s,a,'reset',id,this.clock());});}
+  async reset(a:Actor,id:string){requireGroup(this.config,a,'owner');return this.store.change(s=>{this.ensure(s);if(currentTicket(s,id))throw new UserError('Finish the existing test first.');if(this.config.activeMode){Object.assign(player(s,id),{tier:'Unranked',cooldownUntil:0,waitlist:false});}else delete s.players[id];const p=player(s,id);removeQueue(s,id);clearLists(s,id);this.jobs(s,p,this.clock());this.audit(s,a,'reset',id,this.clock());});}
   async resetAllCooldowns(a:Actor){requireGroup(this.config,a,'owner');return this.store.change(s=>{this.ensure(s);for(const p of Object.values(s.players))p.cooldownUntil=0;this.audit(s,a,'reset-all-cooldowns','all',this.clock());});}
   async adopt(a:Actor,channelId:string,key:string,opener:string,tester:string|null,name:string,participants:string[],options:{maintenance?:boolean;openedAt?:number}={}){
     requireGroup(this.config,a,'staff',true);const now=this.clock();
