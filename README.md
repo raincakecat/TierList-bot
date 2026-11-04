@@ -121,3 +121,15 @@ Missing permission roles now block only the request flows that need them; unrela
 ## Multiple servers and game modes
 
 The candidate supports a shared bot/database with isolated community and mode records. See [multi-server setup](docs/MULTI-SERVER.md) and `config.multimode.example.json`. Keep the new community in maintenance until live rehearsal passes.
+
+## Tester and staff guides
+
+Role-specific command references are in [Tester guide](docs/TESTER-GUIDE.md), [Staff guide](docs/STAFF-GUIDE.md) and [High Staff guide](docs/HIGH-STAFF-GUIDE.md). They describe the required roles, examples and when each operation is appropriate.
+
+To publish or update read-only Discord guide channels for a configured multi-mode server, build from source first (the full package already includes the compiled runtime), then run:
+
+```sh
+node --env-file-if-exists=.env scripts/publish-guides.mjs data/configs/other-modes.json --apply
+```
+
+Omit `--apply` for a preview. The publisher reuses suitable existing guide channels, pins a contents page, edits its own saved messages on updates and restricts channel visibility by role. Guide visibility does not grant command permissions. Its private channel/message manifest is saved under `data/guides/`; keep that directory with the host configuration, outside Git.
