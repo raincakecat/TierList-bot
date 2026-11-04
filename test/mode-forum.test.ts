@@ -25,7 +25,10 @@ test('mode forum edits saved pages, removes obsolete pages and recovers an archi
  await f.store.change(s=>{delete s.panels['forum:sword'];});f.thread.archived=true;f.disableActive();await f.update(1);assert.equal(f.counts().created,1);assert.equal((await f.store.read()).panels['forum:sword'],THREAD);
 });
 test('multi-mode setup capacity refuses category overflow before resource creation',async()=>{
- const c=configSchema.parse(JSON.parse(await readFile('config.multimode.example.json','utf8')));c.supportTicketTypes=[];assert.equal(setupRequirements(c).categories,32);
+ const c=configSchema.parse(JSON.parse(await readFile('config.multimode.example.json','utf8')));c.supportTicketTypes=[];c.queueLayout='per-mode';assert.equal(setupRequirements(c).categories,32);
  const guild={channels:{fetch:async()=>new Collection(Array.from({length:20},(_,i)=>[String(i),{type:ChannelType.GuildCategory}]))},roles:{fetch:async()=>new Collection()}};
  const errors=await setupCapacity(c,guild as never);assert(errors.some(e=>e.includes('32 more categories')));
 });
+
+
+test('regional layout needs three shared queue categories and eight mode High Tests categories',async()=>{const c=configSchema.parse(JSON.parse(await readFile('config.multimode.example.json','utf8')));c.supportTicketTypes=[];assert.equal(c.queueLayout,'regional');assert.equal(setupRequirements(c).categories,11);c.gameModes[0]!.regions.NA.testCategoryId=THREAD;assert.equal(setupRequirements(c).categories,10);const legacy=configSchema.parse(JSON.parse(await readFile('config.example.json','utf8')));assert.equal(legacy.queueLayout,'per-mode');});

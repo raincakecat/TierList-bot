@@ -205,9 +205,9 @@
   "branding": {
     "iconUrl": null,
     "colors": {
-      "panel": "#5865F2",
-      "ticket": "#FFFF00",
-      "result": "#00FFFF",
+      "panel": "#8B5CF6",
+      "ticket": "#A78BFA",
+      "result": "#A78BFA",
       "success": "#00CC66",
       "error": "#ED4245"
     }
@@ -595,5 +595,6 @@
       "normalCooldown": "4d",
       "highCooldown": "4d"
     }
-  ]
+  ],
+  "queueLayout": "regional"
 }

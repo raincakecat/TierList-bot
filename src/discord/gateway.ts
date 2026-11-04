@@ -145,6 +145,7 @@ export class Gateway {
     return `<@${t.opener}> - ${t.openingIgn??'Player'} - **Promoted to/Failed ${tierName(tier)}**\n\n${tier==='HT3'?'*Passed Evaluation*\n':''}${(stages[tier]??[tier]).map(stage=>`__**${stage} Fights:**__\n> Won/Lost 0-0 vs. (IGN)${tier==='HT3'?'':'\n> Won/Lost 0-0 vs. (IGN)'}`).join('\n\n')}`;
   }
   async sendOnce(ch:TextChannel|ThreadChannel,j:Job,options:MessageCreateOptions,save:(k:string,v:unknown)=>Promise<void>){
+    if(options.allowedMentions){const mentions=options.allowedMentions;options={...options,allowedMentions:{...mentions,...(mentions.users?{users:[...new Set(mentions.users)]}:{}),...(mentions.roles?{roles:[...new Set(mentions.roles)]}:{})}};}
     if(j.checkpoints.messageId){const found=await ch.messages.fetch(String(j.checkpoints.messageId)).catch((error:unknown)=>{if((error as {code?:number}).code===10008)return null;throw error;});if(found)return found;}
     const nonce=createHash('sha256').update(j.id).digest('hex').slice(0,24),reference=`Reference ${j.id}`;
     const fileNames=(options.files??[]).map(f=>typeof f==='string'?f.split(/[\\/]/).pop():(f as {name?:string}).name);

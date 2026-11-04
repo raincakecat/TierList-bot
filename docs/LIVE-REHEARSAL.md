@@ -62,4 +62,4 @@ Record host/Node versions, selected database, configuration revision, scenario, 
 
 ## Second-server multi-mode launch
 
-Follow the eight-step checklist in MULTI-SERVER.md. All second-server live checks remain pending until role hierarchy and category capacity permit complete setup. Do not treat the local SQLite load check as evidence of Discord API latency.
+Follow the eight-step checklist in MULTI-SERVER.md. See SECOND-SERVER-REHEARSAL.md for completed API rehearsals and remaining checks with real staff accounts. Do not treat the local SQLite load check as evidence of Discord API latency.

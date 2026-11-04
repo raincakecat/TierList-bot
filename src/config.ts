@@ -13,6 +13,7 @@ const modeSchema=z.object({key:z.string().regex(/^[a-z][a-z0-9-]{0,30}$/),name:z
 export const configSchema = z.object({
   schemaVersion:z.literal(1),
   gameModes:z.array(modeSchema).max(20).default([]),
+  queueLayout:z.enum(['per-mode','regional']).default('per-mode'),
   activeMode:z.object({key:z.string(),name:z.string()}).optional(),
   modeForum:z.object({enabled:z.boolean(),channelId:id,threadIds:z.record(z.string(),z.string()).default({})}).strict().default({enabled:false,channelId:null,threadIds:{}}),
   community:z.object({guildId:id,name:z.string().min(1).max(100),timezone:z.string().refine(v=>{try{new Intl.DateTimeFormat('en',{timeZone:v});return true;}catch{return false;}},'Invalid timezone')}).strict(),

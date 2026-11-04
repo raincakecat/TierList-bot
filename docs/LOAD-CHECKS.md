@@ -49,3 +49,7 @@ The final private rehearsal measured opening at 12,677 ms and archival/deletion 
 Run `npm run build` then `node scripts/load-multimode.mjs`. Synthetic SQLite check on Windows: 24 queues, 300 shared player profiles projected across eight modes, 24 concurrent test reservations, no duplicate mode/region reservations. Seeding: 280 ms; reservation batch: 618 ms; p50: 484 ms; p95: 612 ms. Saved state: 617,618 bytes; combined lists: 24 pages. Measurements depend on hardware. These exclude Discord API/network latency, image downloads and archive uploads. Live queue/archive responsiveness remains a rehearsal requirement.
 
 The same candidate on the home Linux VM passed 203 tests. Linux synthetic load: seed 219 ms, reservation batch 511 ms, p50 406 ms, p95 506 ms, same state size/page count and 24 verified tickets.
+
+## Live multi-mode API rehearsal - 2026-11-03
+
+Verified all 24 queue opening/closing paths, independent mode tickets, forum posts, promotion movement, support closure, restriction recovery and LOA through live Discord APIs using an isolated test profile. Sample end-to-end evaluation opening through saved-job drain: 5,749 ms; archival/deletion: 4,834 ms. A shared-regional-category flow, including queue operations and role updates, took 7,247 ms. These are individual observations, not latency guarantees. No production player test or rank data was used.

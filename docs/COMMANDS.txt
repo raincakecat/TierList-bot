@@ -98,3 +98,6 @@ Queue opening: Staff + matching mode Tester role. Ticket handling/assignment: St
 /setup wizard [mode]: Discord Administrator before initialization, Owner afterward.
 /backup export/restore: Owner, all current-server modes; restore rejects cross-server identity conflicts.
 /backup transfer: Owner, entire deployment, maintenance required in every server.
+
+REGIONAL QUEUE LAYOUT
+Multi-mode setup defaults to NA Queue, EU Queue and AS/AU Queue, each with eight separate mode channels. Queue access remains mode-specific; evaluation tickets open in the shared regional category. High Tests remain separated by mode.

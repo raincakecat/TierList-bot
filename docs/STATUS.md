@@ -1,6 +1,6 @@
 ## Multi-mode candidate - 2026-11-03
 
-203 automated tests pass on Windows and Linux. Multi-server routing, independent mode state, shared UUID checks, scoped administrative actions, forum recovery and capacity checks are implemented locally. Second-server live rehearsal remains pending before launch. The existing Crystal service remains on its prior build during preparation. See MULTI-SERVER.md.
+207 automated tests pass on Windows and Linux. Multi-server routing, independent mode state, shared UUID checks, scoped administrative actions, forum recovery and capacity checks are implemented locally. The isolated live Discord API rehearsal passed and the two-server build is deployed. The second server uses three regional queue categories, with eight mode channels in each. See SECOND-SERVER-REHEARSAL.md for completed checks and remaining staff-account checks. See MULTI-SERVER.md.
 
 # Implementation and release checks
 

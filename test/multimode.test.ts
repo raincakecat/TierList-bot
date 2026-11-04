@@ -72,3 +72,9 @@ test('simultaneous mode configuration saves retain both resource edits',async()=
 
 
 test('server unlink clears every mode list and reverify restores automatic lists in the new region',async()=>{const f=await fixture();await f.service.verify(member,{uuid:'a'.repeat(32),ign:'Player'},'NA','server');await f.scope.run('axe',()=>f.service.forceResult(owner,P,'LT2','NA'));assert.deepEqual(await f.scope.run('axe',async()=>(await f.store.read()).lists.LT2?.NA),[P]);await f.service.unverify(owner,P);assert.deepEqual(await f.scope.run('axe',async()=>(await f.store.read()).lists.LT2?.NA),[]);await f.service.verify(member,{uuid:'a'.repeat(32),ign:'Player'},'EU','other');assert.deepEqual(await f.scope.run('axe',async()=>(await f.store.read()).lists.LT2?.EU),[P]);assert.equal(await f.scope.run('axe',async()=>(await f.store.read()).players[P]!.tier),'LT2');});
+
+
+test('passing evaluation keeps the mode prefix when moving the ticket to High Tests',async()=>{const f=await fixture();await f.service.verify(member,{uuid:'a'.repeat(32),ign:'Player'},'NA','server');const t=await f.scope.run('axe',()=>f.service.forceTest(owner,P,'NA'));await f.guild.change(s=>{s.tickets[t.id]!.status='open';s.tickets[t.id]!.openingDiscordUsername='discordname';});await f.scope.run('axe',()=>f.service.pass(owner,t.id));assert.equal((await f.guild.read()).tickets[t.id]!.name,'axe-discordname-ht3-na');});
+
+
+test('maintenance queues an LOA portal refresh so its button follows the current state',async()=>{const f=await fixture();await f.service.maintenance(owner,true);await f.service.maintenance(owner,false);const s=await f.guild.read();assert.equal(s.maintenance,false);assert(Object.values(s.jobs).some(j=>j.kind==='loa'&&j.data.event==='refresh'));});
