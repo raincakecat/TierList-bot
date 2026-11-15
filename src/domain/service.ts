@@ -13,6 +13,12 @@ export function enqueue(s:State,kind:Job['kind'],data:Job['data'],now:number,id:
   if(kind==='queues'||kind==='lists'){const existing=Object.values(s.jobs).find(j=>j.kind===kind&&j.status==='pending');if(existing){existing.nextAt=Math.min(existing.nextAt,now);return existing.id;}}
   s.jobs[id]??={id,kind,data,status:'pending',attempts:0,nextAt:now,createdAt:now,checkpoints:{}};return id;
 }
+export function compactCompletedJobs(s:State,now:number):number {
+  let removed=0;
+  for(const [id,job]of Object.entries(s.jobs))if(job.status==='done'&&['roles','queues','lists'].includes(job.kind)&&(job.createdAt??job.nextAt)<now-60_000){delete s.jobs[id];removed++;}
+  s.lastJobCompactionAt=now;
+  return removed;
+}
 export function restricted(s:State,p:Player,now:number):boolean{return s.restrictions.some(r=>(r.playerId===p.id||r.uuid===p.uuid)&&(r.until===null||r.until>now));}
 export function currentTicket(s:State,id:string):Ticket|undefined{return Object.values(s.tickets).find(t=>t.opener===id&&t.type==='test'&&t.status!=='closed');}
 export function removeQueue(s:State,id:string){for(const r of REGIONS)s.queues[r]=s.queues[r].filter(x=>x!==id);}

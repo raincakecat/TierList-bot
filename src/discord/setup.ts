@@ -65,8 +65,9 @@ export async function provision(file:ConfigFile,guild:Guild,actor:string,initial
   if(initial){const member=await guild.members.fetch(actor);if(!allowed(c,{id:actor,roles:[...(member.roles.cache?.keys()??[])],administrator:false},'owner'))await member.roles.add(c.permissionGroups.owner[0]!,'Confirmed first setup');}
   return c;
 }
-export async function validateDiscord(c:Config,guild:Guild):Promise<string[]>{
-  const errors=readiness(c),me=await guild.members.fetchMe(),roles=await guild.roles.fetch(),channels=await guild.channels.fetch();
+export async function discordResources(guild:Guild){const [me,roles,channels]=await Promise.all([guild.members.fetchMe(),guild.roles.fetch(),guild.channels.fetch()]);return {me,roles,channels};}
+export async function validateDiscord(c:Config,guild:Guild,resources?:Awaited<ReturnType<typeof discordResources>>):Promise<string[]>{
+  const errors=readiness(c),{me,roles,channels}=resources??await discordResources(guild);
   const roleIds=[...(c.ticketNotifications.highTestingRoleIds??[]),...(c.ticketNotifications.supportRoleIds??[]),c.loa.roleId,c.restriction.roleId,...Object.values(c.permissionGroups).flat(),...c.testerUmbrellaRoleIds,...c.staffTitles.staffRoleIds,...c.staffTitles.highStaffRoleIds,...Object.values(c.tierRoleIds),...REGIONS.filter(r=>c.regions[r].enabled).flatMap(r=>[c.regions[r].regionRoleId,c.regions[r].waitlistRoleId])].filter((x):x is string=>!!x);
   const managedRoleIds=new Set([c.loa.roleId,c.restriction.roleId,...c.permissionGroups.staff,...c.permissionGroups.highStaff,...c.permissionGroups.verifiedTester,...c.testerUmbrellaRoleIds,...Object.values(c.tierRoleIds),...REGIONS.filter(r=>c.regions[r].enabled).flatMap(r=>[c.regions[r].regionRoleId,c.regions[r].waitlistRoleId])].filter(Boolean));
   for(const id of new Set(roleIds)){const role=roles.get(id);if(!role)errors.push(`Missing role ${id}`);else if(role.managed||role.id===guild.id||(managedRoleIds.has(id)&&role.position>=me.roles.highest.position))errors.push(`Role ${role.name} must be assignable and below the bot role`);}

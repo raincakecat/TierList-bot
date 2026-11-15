@@ -7,7 +7,7 @@ This package contains a configurable Discord bot for account linking, regional t
 
 The full-package ZIP includes compiled JavaScript, TypeScript source, automated tests, pinned dependencies, configuration templates, SQL setup, launchers, and this guide. Node.js and downloaded dependencies are not bundled. Internet access is needed for installation and normal operation.
 
-Release status: 223 automated tests pass locally. The consolidated testing and support configuration is deployed privately. This public package contains source and generic examples; validate permissions, hosting, database, and recovery in your own server. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
+Release status: 224 automated tests pass locally. The consolidated testing and support configuration is deployed privately. This public package contains source and generic examples; validate permissions, hosting, database, and recovery in your own server. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
 
 Read the quick start for the shortest installation route. The later sections explain configuration, permissions, hosting, recovery, migration, and troubleshooting. Commands shown in this guide must be entered in the specified place: host terminal commands on the machine running the bot, and slash commands inside your Discord server.
 

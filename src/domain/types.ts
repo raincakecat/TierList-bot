@@ -75,6 +75,7 @@ export interface State {
   leaves?:Record<string,Leave>;
   activityNotices?:Record<string,ActivityNotice>;
   staffTitleGrants?:Record<string,{staff?:boolean;highStaff?:boolean}>;
+  lastJobCompactionAt?:number;
   legacyStatistics?:{sourceHash:string;appliedAt:number;testers:Record<string,{allTimeCount:number;undatedPeriodCount:number}>};
 }
 export function emptyState(guildId:string): State {

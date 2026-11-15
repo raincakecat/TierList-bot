@@ -7,7 +7,7 @@ import { readFile, writeFile, rename } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, MessageFlags, ModalBuilder, PermissionFlagsBits, REST, Routes, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, type Client, type GuildMember, type Interaction } from 'discord.js';
 import { ConfigFile, milliseconds, readiness } from '../config.js';
-import { Service, currentTicket, enqueue, listTiers, player, removeQueue, restricted, syncLists, tierName } from '../domain/service.js';
+import { Service, compactCompletedJobs, currentTicket, enqueue, listTiers, player, removeQueue, restricted, syncLists, tierName } from '../domain/service.js';
 import { dateKey, periodStart, previousMonth } from '../domain/calendar.js';
 import { allowed, requireGroup } from '../domain/permissions.js';
 import { TIERS, UserError, type Actor, type Tier } from '../domain/types.js';
@@ -22,7 +22,7 @@ import { commandDefinitions } from './commands.js';
 import { TicketLinks } from './ticket-links.js';
 import { paginateLines } from './pages.js';
 import { Gateway } from './gateway.js';
-import { provision, setupPreview, setupCapacity, validateDiscord } from './setup.js';
+import { discordResources, provision, setupPreview, setupCapacity, validateDiscord } from './setup.js';
 import { WizardSessions, requireWizard, wizardPolicy, wizardView, wizardModal } from './wizard.js';
 import { healthSummary } from './health.js';
 import { alreadyVerified } from './verification.js';
@@ -82,7 +82,7 @@ export class Runtime {
     await this.jobStore.change(s=>{if(this.file.value.database.backend==='supabase')delete s.runtimeLease;if((s.sessionResumeUntil??0)<now){s.testers={};s.testerModes={};}delete s.sessionResumeUntil;});
     const guild=await this.gateway.guild();await guild.members.fetchMe();
     await new REST({version:'10'}).setToken(process.env.DISCORD_TOKEN!).put(Routes.applicationGuildCommands(this.client.user!.id,guild.id),{body:commandDefinitions(this.community?.master.value??this.file.value)});
-    const errors:string[]=[];await this.eachMode(async()=>{const current=await validateDiscord(this.file.value,guild);this.setupErrors=current;errors.push(...current);});
+    const errors:string[]=[],resources=await discordResources(guild);await this.eachMode(async()=>{const current=await validateDiscord(this.file.value,guild,resources);this.setupErrors=current;errors.push(...current);});
     if(errors.length)console.log(`Setup needs ${errors.length} settings or permission corrections. Use /setup preview or /config validate.`);
     this.running=true;this.timers.push(setInterval(()=>void this.loop().catch(()=>console.error('Background cycle failed; saved work will retry.')),2000));
     this.timers.push(setInterval(()=>void this.runJobs().catch(()=>console.error('Saved work will retry.')),2000));
@@ -115,6 +115,7 @@ export class Runtime {
   private async loop(){if(this.store.operations.recovering)return;return this.store.operations.shared(()=>this.cycle());}
   private async cycle(){if(!this.running||this.busy)return;this.busy=true;try{
     const now=Date.now(),s=await this.jobStore.read(false),due=timerWorkDue(s,now);
+    if(s.initialized&&now-(s.lastJobCompactionAt??0)>86_400_000)await this.jobStore.change(state=>{compactCompletedJobs(state,now);});
     if(due.testing)await this.eachMode(()=>this.service.tick());if(due.leave)await this.leave.tick();
     if(s.initialized&&this.file.value.staffDashboard.channelId&&now-this.lastDashboard>60_000){this.lastDashboard=now;await this.refreshDashboard(s).catch(()=>console.error('Staff dashboard could not refresh; it will retry.'));}
     if(s.initialized&&now-this.lastRefresh>60_000){await this.eachMode(async()=>{if(!readiness(this.file.value).length)await this.gateway.queues();});this.lastRefresh=now;}
@@ -165,7 +166,7 @@ export class Runtime {
     const targets=configs.filter(c=>!mode||c.activeMode?.key===mode).flatMap(c=>highTestPurgePlan(c,state,channels));
     return [...new Map(targets.map(t=>[t.id,t])).values()];
   }
-  private async validateAll(guild:import('discord.js').Guild){const errors:string[]=[];await this.eachMode(async()=>{const current=await validateDiscord(this.file.value,guild);this.setupErrors=current;errors.push(...current.map(e=>this.file.value.activeMode?`${this.file.value.activeMode.name}: ${e}`:e));});return errors;}
+  private async validateAll(guild:import('discord.js').Guild){const errors:string[]=[],resources=await discordResources(guild);await this.eachMode(async()=>{const current=await validateDiscord(this.file.value,guild,resources);this.setupErrors=current;errors.push(...current.map(e=>this.file.value.activeMode?`${this.file.value.activeMode.name}: ${e}`:e));});return errors;}
   private eachMode(action:()=>Promise<void>){return this.community?this.community.each(action):action();}
   private inMode<T>(key:string|undefined,action:()=>Promise<T>){return this.community?this.community.run(key??this.community.keys[0]!,action):action();}
   async interact(i:Interaction){

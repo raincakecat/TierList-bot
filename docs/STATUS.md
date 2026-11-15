@@ -1,6 +1,8 @@
 ## Consolidated deployment - 2026-11-15
 
-223 automated tests pass locally. The private deployment now runs nine testing modes in the main server and five support ticket types in a separate support server through one database. The Project Lunar testing partitions were transferred after its final open test was archived. Existing support tickets in the older servers remain there until they close. The nine high-list forum posts, 27 waitlist panels, one results mapping, support panel, role hierarchy, and channel access were checked live. The old Crystal high-list messages were backed up before their channels were retired. Public examples contain no live IDs or member data.
+224 automated tests pass locally. The private deployment now runs nine testing modes in the main server and five support ticket types in a separate support server through one database. The Project Lunar testing partitions were transferred after its final open test was archived. Existing support tickets in the older servers remain there until they close. The nine high-list forum posts, 27 waitlist panels, one results mapping, support panel, role hierarchy, and channel access were checked live. The old Crystal high-list messages were backed up before their channels were retired. Public examples contain no live IDs or member data.
+
+Startup validation now fetches Discord roles and channels once per server. Daily compaction removes old completed role, queue, and list refresh jobs while retaining archive, audit, and pending work. In the live database, this reduced the state document from about 8.6 MB to 3.6 MB and the main server's saved job count from roughly 11,900 to 4,700. The service connected all three configured servers in about eight seconds after the update. Continue monitoring interaction expiry and worker retries; this measurement does not establish long-term latency.
 
 ## Multi-mode candidate - 2026-11-03
 

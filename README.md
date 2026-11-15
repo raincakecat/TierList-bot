@@ -6,7 +6,7 @@ Version 0.2.0 adds staff Leave of Absence requests, approval controls, timed rol
 
 **Full package:** [Download the ZIP with compiled files and PDF setup guide](full-package/full-package.zip), or [read the PDF guide](docs/Full-Setup-Guide.pdf).
 
-**Status:** 223 automated tests pass locally. The consolidated Crystal testing and Lunar Support configuration is deployed on the private VM. This public package contains examples and source code only; supply your own IDs and credentials. See `docs/STATUS.md`.
+**Status:** 224 automated tests pass locally. The consolidated Crystal testing and Lunar Support configuration is deployed on the private VM. This public package contains examples and source code only; supply your own IDs and credentials. See `docs/STATUS.md`.
 
 ## Install the ready-to-run ZIP
 
