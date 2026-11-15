@@ -325,7 +325,7 @@ function deliverySignature(content:string,embeds:readonly unknown[]):string {
 
 export function testingTicketName(t:Pick<Ticket,'target'|'region'|'opener'|'modeId'>,username:string):string {
   const clean=channelName(username).replace(/-+/g,'-').replace(/^-|-$/g,'')||t.opener;
-  const name=t.modeId&&t.modeId!=='crystal'?`${t.modeId}-${clean}`:clean;return channelName(t.target?`${name}-${t.target}-${t.region}`:`test-${name}-${t.region}`);
+  const name=`${t.modeId??'crystal'}-${clean}`;return channelName(t.target?`${name}-${t.target}-${t.region}`:`test-${name}-${t.region}`);
 }
 
 /** Keep every UTF-8 code point intact and remain below Discord's upload cap. */
