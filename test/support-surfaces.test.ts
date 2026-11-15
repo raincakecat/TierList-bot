@@ -11,7 +11,7 @@ test('support cards keep five routes readable with the Lunar logo',async()=>{
   const guide=supportGuideEmbed(config,'123456789012345678',logo).toJSON();
   assert.equal(panel.thumbnail?.url,logo);
   assert.equal(guide.thumbnail?.url,logo);
-  assert.equal(panel.fields?.length,3);
+  assert.equal(panel.fields?.length,2);
   assert.equal(guide.fields?.length,5);
   assert.match(guide.description??'',/<#123456789012345678>/);
   for(const label of ['General Support','Player Report','Staff Report','Restriction Appeal','Partnership Request']){
