@@ -24,7 +24,7 @@ export function supportGuideEmbed(config:Config,panelChannelId:string,logoUrl?:s
       {name:'01  ·  General Support',value:'Questions or issues with the server.',inline:false},
       {name:'02  ·  Player Report',value:'Report a player. Include their name and any proof you have.',inline:false},
       {name:'03  ·  Staff Report',value:'Report a staff member.',inline:false},
-      {name:'04  ·  Restriction Appeal',value:'Appeal a restriction. Tell us why it should be reviewed.',inline:false},
+      {name:'04  ·  Restriction Appeal',value:'Appeal a restriction.',inline:false},
       {name:'05  ·  Partnership Request',value:'Ask about a partnership with Lunar Tiers.',inline:false},
     )
     .setFooter({text:'Open one ticket per issue  •  Add screenshots if you have them'});
