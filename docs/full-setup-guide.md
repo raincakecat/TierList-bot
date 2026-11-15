@@ -1,13 +1,13 @@
-# Crystal Tier List Bot
+# Lunar Tiers Discord Bot
 ## Full installation and operations guide
 
-Version 0.2.0 | Updated October 28, 2026
+Version 0.2.0 | Updated November 15, 2026
 
-This package contains a configurable Discord bot for Crystal PvP account linking, regional testing, tier lists, support tickets, deadlines, restrictions, and backups. Each installation serves one Discord community using one bot application and one running process.
+This package contains a configurable Discord bot for account linking, regional testing across nine game modes, tier lists, support tickets, deadlines, restrictions, and backups. One bot process can serve a testing server and a separate support server using one database.
 
 The full-package ZIP includes compiled JavaScript, TypeScript source, automated tests, pinned dependencies, configuration templates, SQL setup, launchers, and this guide. Node.js and downloaded dependencies are not bundled. Internet access is needed for installation and normal operation.
 
-Release status: 177 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite, and Supabase has been exercised live. This reusable package remains an implementation candidate: validate your own server permissions, hosting, remote database, and recovery flow in rehearsal. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
+Release status: 221 automated tests pass locally. The consolidated testing and support configuration is deployed privately. This public package contains source and generic examples; validate permissions, hosting, database, and recovery in your own server. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
 
 Read the quick start for the shortest installation route. The later sections explain configuration, permissions, hosting, recovery, migration, and troubleshooting. Commands shown in this guide must be entered in the specified place: host terminal commands on the machine running the bot, and slash commands inside your Discord server.
 
@@ -566,3 +566,18 @@ Bot Admin /unverify clears verification in the current server only. Owner /unver
 Before launch, rehearse verification, conflicting UUID claims, two simultaneous mode queues/tests, tester-role permissions, results/reactions, restrictions, support and LOA. Check archived forum recovery and stale-page removal. Restart during saved role/archive work and verify correct server/mode routing without duplicate channels. Test a conflicting restore and confirm it leaves current data intact. Check /health and ticket/archive timing under load, then leave maintenance only after successful live checks.
 
 The repeatable local check is npm run build followed by node scripts/load-multimode.mjs. On the home Linux VM, 24 concurrent reservations across eight modes and three regions completed in 511 ms with no duplicates, using 300 player profiles. These are local state timings, not Discord API or archive-upload guarantees. The live second-server rehearsal is still required. See docs/MULTI-SERVER.md for the complete checklist. The future Minecraft mod/API is outside this update.
+
+---PAGE---
+# Consolidated Lunar Tiers layout
+
+The main server supports Crystal, Sword, Axe, SMP, Pot, Mace, UHC, Nethpot, and Spear Mace. NA, EU, and AS/AU each have one queue category with a waitlist channel for every mode. There is one results channel and one High Testing Lists forum with a managed post per mode. The post groups NA, EU, then AS/AU; within each region it orders HT3, LT2, HT2, then LT1. Rank and cooldown state remains separate by mode.
+
+Use config.consolidated.example.json as the main-server template and config.support.example.json for the support server. Copy each to a private configuration file, fill in your own server, role, channel, and category IDs, and use the same database settings in both. Set BOT_CONFIGS in .env to a JSON array containing the main file first and support file second. A retiring server can remain as another entry while its existing tickets finish. Keep all live JSON files and .env outside public Git.
+
+On the main server, a tester opens a queue with Staff, Verified Tester, and the matching mode Tester role. Staff can work an assigned ticket without that mode Tester role. Configure staffTitles so local title roles add the shared Staff or High Staff role. High Staff should begin at the intended senior rank; Partnership Manager belongs to Staff and remains below Regulator.
+
+In the support server, General Support is visible to Staff. Player Reports are handled by Regulator and above, but their archives are High Staff only. Staff Reports and Restriction Appeals are High Staff only. Partnership Requests are handled by Partnership Manager, with their archives visible to Partnership Manager and Regulator and above. Set the channel overwrites to match these boundaries and verify them with ordinary test accounts. A Restriction Key holder may use /unrestrict from an allowed channel but does not get appeal-channel access from that key.
+
+Set supportRequestsEnabled to false and supportRedirectUrl to the support-server invite in the main server after the new panel is ready. This replaces new support requests with a link; it does not close existing tickets. Set supportTargetGuildId in the support configuration to the main server ID for cross-server /profile and /unrestrict. New support transcripts stay in the support server's private archive channels and host archive directory. Old transcripts remain with the server where each ticket opened.
+
+Owner controls setcooldown, configcooldown, and allcdreset. Owner or CD Resetter can clear one player's cooldown with resetcooldown. Bot Admin can manage testers and local verification without changing cooldown policy. All bulk actions remain scoped to the server where the command runs. Before a live cutover, save a database backup and Discord layout snapshot, archive old testing tickets, rehearse the new panel and permissions, and check the nine forum posts and results channel.

@@ -20,11 +20,11 @@ styles = getSampleStyleSheet()
 styles.add(ParagraphStyle(name='GuideBody', fontName=regular, fontSize=10, leading=14.3,
                           textColor=colors.HexColor('#243447'), spaceAfter=9, wordWrap='LTR'))
 styles.add(ParagraphStyle(name='GuideTitle', fontName=bold, fontSize=23, leading=28,
-                          textColor=colors.HexColor('#173B62'), spaceAfter=16))
+                          textColor=colors.HexColor('#60418F'), spaceAfter=16))
 styles.add(ParagraphStyle(name='GuideSubtitle', fontName=bold, fontSize=14, leading=19,
-                          textColor=colors.HexColor('#386A83'), spaceAfter=14))
+                          textColor=colors.HexColor('#6B5590'), spaceAfter=14))
 styles.add(ParagraphStyle(name='GuideCode', fontName='Courier', fontSize=8.4, leading=11,
-                          leftIndent=10, rightIndent=5, backColor=colors.HexColor('#EFF3F8'),
+                          leftIndent=10, rightIndent=5, backColor=colors.HexColor('#F4F0F8'),
                           borderPadding=8, spaceBefore=5, spaceAfter=13))
 styles.add(ParagraphStyle(name='GuideBullet', parent=styles['GuideBody'], leftIndent=12,
                           firstLineIndent=0, bulletIndent=0, spaceAfter=6))
@@ -71,19 +71,19 @@ for number, section in enumerate(sections):
 def frame(canvas, doc):
     w, h = doc.pagesize
     canvas.saveState()
-    canvas.setFillColor(colors.HexColor('#173B62'))
+    canvas.setFillColor(colors.HexColor('#60418F'))
     canvas.rect(0, h-10, w, 10, fill=1, stroke=0)
     canvas.setStrokeColor(colors.HexColor('#D8E3EF'))
     canvas.line(48, 43, w-48, 43)
     canvas.setFillColor(colors.HexColor('#62758B'))
     canvas.setFont(regular, 8)
-    canvas.drawString(48, 29, 'CRYSTAL BOT  /  SETUP & OPERATIONS  /  v0.2.0')
+    canvas.drawString(48, 29, 'LUNAR TIERS  /  SETUP & OPERATIONS  /  v0.2.0')
     canvas.drawRightString(w-48, 29, str(doc.page))
     canvas.restoreState()
 
 destination = root / 'docs/Full-Setup-Guide.pdf'
 SimpleDocTemplate(str(destination), pagesize=(612,792), leftMargin=48, rightMargin=48,
-                  topMargin=42, bottomMargin=58, title='Crystal Bot - Full Setup Guide',
+                  topMargin=42, bottomMargin=58, title='Lunar Tiers - Full Setup Guide',
                   author='TierList-bot project', subject='Installation, configuration, hosting and recovery').build(
                       story, onFirstPage=frame, onLaterPages=frame)
 print(f'Created {destination}')

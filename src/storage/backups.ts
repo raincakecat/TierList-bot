@@ -21,7 +21,15 @@ export function validateState(input:unknown,guild:string):State {
   }
   const queued=new Set<string>();for(const r of REGIONS){if(!Array.isArray(s.queues[r]))throw new Error('Invalid queue');for(const id of s.queues[r]){if(!s.players[id]||queued.has(id))throw new Error('Invalid or duplicate queue member');queued.add(id);}}
   const testing=new Set<string>();for(const [id,t]of Object.entries(s.tickets)){if(t.id!==id||!s.players[t.opener]||!TIERS.includes(t.openingTier)||!['opening','open','closing','closed'].includes(t.status)||!Array.isArray(t.participants)||!Array.isArray(t.accessRoles)||!Array.isArray(t.closingRoles)||!t.archiveChannelId)throw new Error('Invalid ticket');if(t.type==='test'&&t.status!=='closed'){const scope=t.opener+':'+(t.modeId??s.defaultModeId??'crystal');if(testing.has(scope))throw new Error('Duplicate active test');testing.add(scope);}}
-  for(const [id,j]of Object.entries(s.jobs))if(j.id!==id||!['open','roles','archive','result','notice','lists','queues','deadline','loa'].includes(j.kind)||!['pending','working','done'].includes(j.status)||!j.data||!j.checkpoints)throw new Error('Invalid background job');
+  for(const [id,j]of Object.entries(s.jobs))if(j.id!==id||!['open','roles','archive','result','notice','lists','queues','deadline','loa','activity'].includes(j.kind)||!['pending','working','done'].includes(j.status)||!j.data||!j.checkpoints)throw new Error('Invalid background job');
+  let activeNotices=0;for(const [id,n] of Object.entries(s.activityNotices??{})){
+    const snowflake=(v:unknown)=>typeof v==='string'&&/^\d{17,20}$/.test(v);
+    if(!n||n.id!==id||!/^[a-f0-9-]{36}$/.test(id)||!snowflake(n.createdBy)||!['opening','open','closing','closed'].includes(n.status)||![n.noticeChannelId,n.reportChannelId,n.loaRoleId].every(snowflake)||n.noticeChannelId===n.reportChannelId||!Array.isArray(n.staffRoleIds)||!n.staffRoleIds.length||!n.staffRoleIds.every(snowflake)||!Array.isArray(n.roster)||!n.roster.every(snowflake)||new Set(n.roster).size!==n.roster.length||!Array.isArray(n.responses)||!n.responses.every(x=>n.roster.includes(x))||new Set(n.responses).size!==n.responses.length)throw new Error('Invalid activity notice');
+    if(n.status!=='opening'&&(!snowflake(n.messageId)||!Number.isSafeInteger(n.postedAt)||!Number.isSafeInteger(n.closesAt)||(n.closesAt??0)-(n.postedAt??0)!==86400000))throw new Error('Invalid activity deadline');
+    if(['closing','closed'].includes(n.status)&&(!Array.isArray(n.missing)||!Array.isArray(n.exempt)||![...n.missing,...n.exempt].every(x=>n.roster.includes(x))))throw new Error('Invalid activity results');
+    if(n.roleExempt!==undefined&&(!Array.isArray(n.roleExempt)||!n.roleExempt.every(x=>n.roster.includes(x))))throw new Error('Invalid activity role exemptions');
+    if(n.status!=='closed')activeNotices++;
+  }if(activeNotices>1)throw new Error('Duplicate activity notices');
   for(const t of Object.values(s.tickets)){
     if(t.openingDiscordUsername!==undefined&&(typeof t.openingDiscordUsername!=='string'||!t.openingDiscordUsername.trim()||t.openingDiscordUsername.length>100))throw new Error('Invalid ticket Discord username');
     if(t.closeRequests!==undefined&&!Array.isArray(t.closeRequests))throw new Error('Invalid closure requests');

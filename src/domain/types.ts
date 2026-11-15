@@ -32,7 +32,7 @@ export interface Ticket {
 }
 export interface Restriction { id: string; playerId: string; uuid: string; reason: string; until: number | null; actor: string; previousTier?:Tier; previousTiers?:Record<string,Tier> }
 export interface Job {
-  id: string; kind: 'open'|'roles'|'archive'|'result'|'notice'|'lists'|'queues'|'deadline'|'loa';
+  id: string; kind: 'open'|'roles'|'archive'|'result'|'notice'|'lists'|'queues'|'deadline'|'loa'|'activity';
   data: Record<string, unknown>; status: 'pending'|'working'|'done'; attempts: number;
   nextAt: number; createdAt?:number; leaseUntil?: number; checkpoints: Record<string, unknown>;
   lastFailureCode?:string; lastFailureAt?:number;
@@ -45,6 +45,12 @@ export interface Leave {
   roleId:string; reviewChannelId:string; acceptedChannelId:string; adminRoles:string[];
   reviewMessageId?:string; acceptedMessageId?:string;
   notifications?:Record<string,'sent'|'blocked'>;
+}
+export interface ActivityNotice {
+  id:string; createdBy:string; status:'opening'|'open'|'closing'|'closed';
+  roster:string[]; responses:string[]; noticeChannelId:string; reportChannelId:string;
+  staffRoleIds:string[]; loaRoleId:string; messageId?:string; postedAt?:number; closesAt?:number;
+  missing?:string[]; exempt?:string[]; roleExempt?:string[];
 }
 export interface State {
   servers?:Record<string,State>;
@@ -67,6 +73,8 @@ export interface State {
   reviews?: Record<string,{filename:string;key:string;field:string;message:string;resolved:boolean;messageId?:string}>;
   lastAutomaticBackupAt?: number;
   leaves?:Record<string,Leave>;
+  activityNotices?:Record<string,ActivityNotice>;
+  staffTitleGrants?:Record<string,{staff?:boolean;highStaff?:boolean}>;
   legacyStatistics?:{sourceHash:string;appliedAt:number;testers:Record<string,{allTimeCount:number;undatedPeriodCount:number}>};
 }
 export function emptyState(guildId:string): State {

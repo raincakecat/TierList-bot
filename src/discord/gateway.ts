@@ -13,6 +13,7 @@ import { JobDeferred, REGIONS, type Job, type Player, type State, type Ticket, t
 import { rolesFor } from '../domain/permissions.js';
 import type { Store } from '../storage/store.js';
 import { LeaveGateway } from './loa-gateway.js';
+import {ActivityGateway} from './activity-gateway.js';
 
 export class Gateway {
   public synchronizingRoles=new Set<string>();
@@ -36,6 +37,7 @@ export class Gateway {
       case 'deadline':{const d=ticket?.deadline;if(ticket?.status==='open'&&d&&d.at===job.data.at&&d.setter===job.data.setter&&ticket.channelId)await this.sendOnce(await this.text(ticket.channelId),job,{content:`<@${d.setter}> ⏳ This ticket has reached its deadline. Please review it.`,allowedMentions:{users:[d.setter],parse:[]}},checkpoint);break;}
       case 'archive':{const target=ticket??job.data.archiveOnlyTicket as Ticket|undefined;if(target)await this.archive(target,job,checkpoint);break;}
       case 'loa':await new LeaveGateway(this.client,this.store,()=>this.config,this).job(job,checkpoint);await this.leavePanels();break;
+      case 'activity':await new ActivityGateway(this.client,this.guildStore,()=>this.config,this).job(job,checkpoint);break;
     }
   }
   async failure(job:Job){const id=this.config.channels.operationalLog;if(!id)return;await(await this.text(id)).send({content:`An operation needs attention: ${job.kind}${job.data.ticketId?` for ticket ${String(job.data.ticketId)}`:''}${job.lastFailureCode?` (${job.lastFailureCode})`:''}. It is saved and will retry. No unsaved ticket will be deleted.`,allowedMentions:{parse:[]}});}
@@ -176,6 +178,7 @@ export class Gateway {
     await this.queues();await this.lists();
   }
   async supportPanels(){const c=this.config;if(!c.modules.supportTickets)return;
+    if(!c.supportRequestsEnabled){const channel=await this.text(c.channels.supportPanel!);await this.upsertPanel('support:0',channel,{embeds:[new EmbedBuilder().setTitle('Support has moved').setDescription('Open a support ticket in the Lunar Support server. Existing tickets here can still be finished.').setColor(c.branding.colors.panel as `#${string}`)],components:c.supportRedirectUrl?[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel('Open Lunar Support').setStyle(ButtonStyle.Link).setURL(c.supportRedirectUrl))]:[]});await this.removePanelPages('support',new Set(['support:0']),channel.id);return;}
     const kinds=c.supportTicketTypes.filter(t=>t.enabled),keep=new Set<string>(),channel=await this.text(c.channels.supportPanel!);
     for(let page=0;page<Math.ceil(kinds.length/15);page++){
       const key=`support:${page}`,slice=kinds.slice(page*15,page*15+15),components:ActionRowBuilder<ButtonBuilder>[]=[];keep.add(key);

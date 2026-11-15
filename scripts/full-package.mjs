@@ -4,9 +4,11 @@ import { createHash } from 'node:crypto';
 import { zipSync, strToU8 } from 'fflate';
 
 const entries={};
-async function collect(directory){for(const item of await readdir(directory,{withFileTypes:true})){if(item.name==='PRIVATE-DEPLOYMENT.md')continue;const path=join(directory,item.name);if(item.isDirectory())await collect(path);else entries[relative('.',path).replaceAll('\\','/')]=new Uint8Array(await readFile(path));}}
+const privateScripts=new Set(['stage-consolidation.mjs','order-consolidation-roles.mjs','consolidate-testing.mjs']);
+const privateDocs=new Set(['PRIVATE-DEPLOYMENT.md','LOCAL-DATABASE-CUTOVER-2026-10-27.md','RELIABILITY-AUDIT-2026-10-26.md','TICKET-PERFORMANCE-2026-10-26.md']);
+async function collect(directory){for(const item of await readdir(directory,{withFileTypes:true})){if(directory==='docs'&&privateDocs.has(item.name)||directory==='scripts'&&privateScripts.has(item.name))continue;const path=join(directory,item.name);if(item.isDirectory())await collect(path);else entries[relative('.',path).replaceAll('\\','/')]=new Uint8Array(await readFile(path));}}
 for(const directory of ['dist/src','src','test','sql','docs','scripts','.github'])await collect(directory);
-for(const name of ['package.json','package-lock.json','tsconfig.json','.gitignore','README.md','config.example.json','config.multimode.example.json','.env.example'])entries[name]=new Uint8Array(await readFile(name));
+for(const name of ['package.json','package-lock.json','tsconfig.json','.gitignore','README.md','config.example.json','config.multimode.example.json','config.consolidated.example.json','config.support.example.json','.env.example'])entries[name]=new Uint8Array(await readFile(name));
 entries['Full-Setup-Guide.pdf']=entries['docs/Full-Setup-Guide.pdf'];
 delete entries['docs/Full-Setup-Guide.pdf'];
 entries['start.bat']=strToU8('@echo off\r\ncd /d "%~dp0"\r\nnpm.cmd start\r\n');

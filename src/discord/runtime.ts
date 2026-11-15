@@ -28,8 +28,18 @@ import { healthSummary } from './health.js';
 import { alreadyVerified } from './verification.js';
 import { LeaveService, currentLeave, quotaExempt } from '../domain/loa.js';
 import { LeaveGateway, leaveEmbed } from './loa-gateway.js';
+import {ActivityGateway} from './activity-gateway.js';
+import {ActivityService} from '../domain/activity.js';
+import {cooldownSummary,dashboardEmbed,dashboardChannelSafe} from './staff-dashboard.js';
+import {StaffTitleSync} from './staff-title-sync.js';
 
 type Pending={actor:string;expires:number;fingerprint:string;action:()=>Promise<string>;group:'owner'|'setup';recovery?:boolean};
+export function timerWorkDue(s:import('../domain/types.js').State,now:number){
+  const tickets=Object.values(s.tickets),testing=tickets.some(t=>t.status==='open'&&((!s.maintenance&&(t.closeRequests??[]).some(r=>r.status==='pending'&&r.expiresAt<=now))||!!(t.deadline&&!t.deadline.notified&&t.deadline.at<=now)))||s.restrictions.some(r=>r.until!==null&&r.until<=now);
+  const leave=Object.values(s.leaves??{}).some(l=>l.status==='active'&&l.endsAt!==undefined&&l.endsAt<=now);
+  return {testing,leave};
+}
+function deferBeforeRouting(i:Interaction){if(!i.isRepliable())return false;if(i.isChatInputCommand())return !['stats','testerstats','testerlb'].includes(i.commandName);if(!i.isButton())return false;const id=i.customId.replace(/^m:[^:]+:/,'');return /^(activity:|support:|requestclose:|join:)/.test(id)||['waitlist','leave'].includes(id);}
 export class Runtime {
   private service:Service;
   private gateway:Gateway;
@@ -46,6 +56,7 @@ export class Runtime {
   private jobTasks=new Set<Promise<boolean>>();
   private lastRefresh=0;
   private lastListCheck=0;
+  private lastDashboard=0;
   private baseErrors:string[]=[];
   private modeErrors=new Map<string,string[]>();
   private get setupErrors(){return this.community?this.modeErrors.get(this.community.key)??this.baseErrors:this.baseErrors;}
@@ -56,8 +67,10 @@ export class Runtime {
   private leave:LeaveService;
   private startedAt=Date.now();
   private ticketLinks=new TicketLinks();
+  private staffTitleSync:StaffTitleSync;
   constructor(private client:Client,private file:ConfigFile,private store:Store,private exitOnLeaseFailure:(code:number)=>void=code=>process.exit(code),private community?:Community){
     this.jobStore=community?.guildStore??store;
+    this.staffTitleSync=new StaffTitleSync(this.jobStore,()=>this.community?.master.value??this.file.value);
     this.leave=new LeaveService(store,()=>file.value);
     this.service=new Service(store,()=>file.value);this.gateway=new Gateway(client,store,()=>file.value,(id,channel)=>this.ticketLinks.ready(id,channel),this.jobStore);
     this.worker=new Worker(this.jobStore,(job,save)=>this.community?this.community.run(String(job.data.modeId??this.community.keys[0]),()=>this.gateway.job(job,save)):this.gateway.job(job,save),j=>this.community?this.community.run(String(j.data.modeId??this.community.keys[0]),()=>this.gateway.failure(j)):this.gateway.failure(j),3);
@@ -72,11 +85,11 @@ export class Runtime {
     const errors:string[]=[];await this.eachMode(async()=>{const current=await validateDiscord(this.file.value,guild);this.setupErrors=current;errors.push(...current);});
     if(errors.length)console.log(`Setup needs ${errors.length} settings or permission corrections. Use /setup preview or /config validate.`);
     this.running=true;this.timers.push(setInterval(()=>void this.loop().catch(()=>console.error('Background cycle failed; saved work will retry.')),2000));
-    this.timers.push(setInterval(()=>void this.runJobs().catch(()=>console.error('Saved work will retry.')),500));
+    this.timers.push(setInterval(()=>void this.runJobs().catch(()=>console.error('Saved work will retry.')),2000));
     this.client.on('interactionCreate',i=>void this.interact(i));
     this.client.on('guildMemberRemove',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.eachMode(()=>this.service.departed(m.id)).then(()=>this.runJobs()).catch(()=>console.error('Member departure could not be recorded.'));});
-    this.client.on('guildMemberAdd',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.store.operations.shared(async()=>{await this.eachMode(async()=>{const s=await this.store.read();if(s.players[m.id])await this.gateway.playerRoles(s.players[m.id]!);});await new LeaveGateway(this.client,this.store,()=>this.file.value,this.gateway).syncRole(m.id);}).catch(()=>console.error('Member role restoration needs review.'));});
-    this.client.on('guildMemberUpdate',(old,m)=>{if(m.guild.id!==this.file.value.community.guildId||this.gateway.synchronizingRoles.has(m.id))return;const configured=(this.community?.configs()??[this.file.value]).flatMap(c=>Object.values(c.tierRoleIds)).filter(Boolean);if(configured.some(id=>old.roles.cache.has(id!)!==m.roles.cache.has(id!))||(this.community?.configs()??[this.file.value]).flatMap(c=>c.permissionGroups.verifiedTester).some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id))||this.file.value.permissionGroups.staff.some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id)))void this.eachMode(()=>this.reconcileMember(m.id)).catch(()=>console.error('Member role reconciliation needs review.'));});
+    this.client.on('guildMemberAdd',m=>{if(m.guild.id!==this.file.value.community.guildId)return;void this.store.operations.shared(async()=>{await this.eachMode(async()=>{const s=await this.store.read();if(s.players[m.id])await this.gateway.playerRoles(s.players[m.id]!);});await new LeaveGateway(this.client,this.store,()=>this.file.value,this.gateway).syncRole(m.id);await this.staffTitleSync.sync(m);}).catch(()=>console.error('Member role restoration needs review.'));});
+    this.client.on('guildMemberUpdate',(old,m)=>{if(m.guild.id!==this.file.value.community.guildId||this.gateway.synchronizingRoles.has(m.id))return;const configured=(this.community?.configs()??[this.file.value]).flatMap(c=>Object.values(c.tierRoleIds)).filter(Boolean);if(configured.some(id=>old.roles.cache.has(id!)!==m.roles.cache.has(id!))||(this.community?.configs()??[this.file.value]).flatMap(c=>c.permissionGroups.verifiedTester).some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id))||this.file.value.permissionGroups.staff.some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id)))void this.eachMode(()=>this.reconcileMember(m.id)).catch(()=>console.error('Member role reconciliation needs review.'));const titleIds=[...this.file.value.staffTitles.staffRoleIds,...this.file.value.staffTitles.highStaffRoleIds,...this.file.value.permissionGroups.staff,...this.file.value.permissionGroups.highStaff];if(titleIds.some(id=>old.roles.cache.has(id)!==m.roles.cache.has(id)))void this.staffTitleSync.sync(m).catch(()=>console.error('Staff title access needs review.'));});
     console.log(`Bot connected: ${this.file.value.community.name}.`);
   }
   private async runJobs(){
@@ -101,15 +114,25 @@ export class Runtime {
   }
   private async loop(){if(this.store.operations.recovering)return;return this.store.operations.shared(()=>this.cycle());}
   private async cycle(){if(!this.running||this.busy)return;this.busy=true;try{
-    await this.eachMode(()=>this.service.tick());await this.leave.tick();const now=Date.now(),s=await this.jobStore.read(false);
+    const now=Date.now(),s=await this.jobStore.read(false),due=timerWorkDue(s,now);
+    if(due.testing)await this.eachMode(()=>this.service.tick());if(due.leave)await this.leave.tick();
+    if(s.initialized&&this.file.value.staffDashboard.channelId&&now-this.lastDashboard>60_000){this.lastDashboard=now;await this.refreshDashboard(s).catch(()=>console.error('Staff dashboard could not refresh; it will retry.'));}
     if(s.initialized&&now-this.lastRefresh>60_000){await this.eachMode(async()=>{if(!readiness(this.file.value).length)await this.gateway.queues();});this.lastRefresh=now;}
     if(s.initialized&&this.file.value.modules.tierLists&&now-this.lastListCheck>15*60_000){await this.eachMode(()=>this.store.change(state=>{enqueue(state,'lists',{},now);}));this.lastListCheck=now;}
     if(now-(s.lastAutomaticBackupAt??0)>86_400_000){await new Backups(this.jobStore,this.community?.master.value.backups.directory??this.file.value.backups.directory).create(true);await this.store.change(s=>s.lastAutomaticBackupAt=now);await this.eachMode(()=>this.gateway.cleanupImages());}
-    const channelId=this.file.value.channels.staffActionLog;if(channelId)await this.jobStore.change(state=>{for(const e of state.audit)if(!state.jobs[`audit-${e.id}`])enqueue(state,'notice',{channelId,content:`${new Date(e.at).toISOString()} | ${e.actor} | ${e.action} | ${e.target}`},now,`audit-${e.id}`);});
+    const channelId=this.file.value.channels.staffActionLog;if(channelId&&s.audit.some(e=>!s.jobs[`audit-${e.id}`]))await this.jobStore.change(state=>{for(const e of state.audit)if(!state.jobs[`audit-${e.id}`])enqueue(state,'notice',{channelId,content:`${new Date(e.at).toISOString()} | ${e.actor} | ${e.action} | ${e.target}`},now,`audit-${e.id}`);});
     if(this.file.value.modules.testerQuotas&&s.initialized){const month=previousMonth(now,this.file.value.community.timezone),jobId=`quota-${month}`;if(!s.jobs[jobId])await this.jobStore.change(state=>{const profiles=new Map<string,import('../domain/types.js').Player>();for(const p of [...Object.values(state.players),...Object.values(state.modes??{}).flatMap(mode=>Object.values(mode.players))]){const old=profiles.get(p.id);if(!old||p.testerSince&&(!old.testerSince||p.testerSince<old.testerSince))profiles.set(p.id,p);}const rows=[...profiles.values()].filter(p=>p.testerSince&&dateKey(p.testerSince,this.file.value.community.timezone).slice(0,7)<month).map(p=>{const count=state.completions.filter(e=>e.tester===p.id&&dateKey(e.at,this.file.value.community.timezone).slice(0,7)===month).length;return `<@${p.id}>: ${count} / ${quotaExempt(state,p.id,month,this.file.value.community.timezone,now)?'LOA exempt':this.file.value.testing.monthlyTesterQuota}`;});const pages=paginateLines(rows.length?rows:['No eligible testers this period.'],1800);for(let page=0;page<pages.length;page++)enqueue(state,'notice',{channelId:this.file.value.channels.quotaReports,content:`Monthly tester quota report: ${month}${pages.length>1?` (${page+1}/${pages.length})`:''}\n${pages[page]}`},now,page?`${jobId}-${page}`:jobId);});}
     if(!s.maintenance)for(const id of s.departures??[]){const tickets=Object.values(s.tickets).filter(t=>t.opener===id&&t.status==='open');const internal:Actor={id:'system',roles:this.file.value.permissionGroups.owner,administrator:false,channelAccess:true};for(const t of tickets)await this.inMode(t.modeId,()=>this.service.close(internal,t.id,'discontinued','Member left the server'));await this.jobStore.change(state=>{if(!Object.values(state.tickets).some(t=>t.opener===id&&t.status==='opening'))state.departures=(state.departures??[]).filter(x=>x!==id);});}
     for(const [id,p]of this.pending)if(p.expires<now)this.pending.delete(id);
   }finally{this.busy=false;}}
+  private async refreshDashboard(s:import('../domain/types.js').State){
+    const c=this.community?.master.value??this.file.value,id=c.staffDashboard.channelId;if(!id)return;
+    const ch=await this.gateway.text(id);if(!dashboardChannelSafe(ch,c,this.client.user!.id))throw new Error('Staff dashboard channel is not private to staff');
+    const payload={embeds:[dashboardEmbed(s,c)],allowedMentions:{parse:[] as never[]}};let msg=s.panels.staffDashboard?await ch.messages.fetch(s.panels.staffDashboard).catch(e=>{if((e as {code?:number}).code===10008)return null;throw e;}):null;
+    if(!msg&&!s.panels.staffDashboard){const recent=await ch.messages.fetch({limit:50});msg=recent.find(m=>m.author.id===this.client.user!.id&&m.embeds[0]?.title==='Staff Dashboard')??null;}
+    if(msg)await msg.edit(payload);else msg=await ch.send(payload);
+    if(s.panels.staffDashboard!==msg.id)await this.jobStore.change(state=>{state.panels.staffDashboard=msg!.id;});
+  }
   async stop(){this.running=false;for(const t of this.timers)clearInterval(t);while(this.busy||this.jobsBusy||this.jobTasks.size)await new Promise(resolve=>setTimeout(resolve,50));for(const t of this.leaseTimers)clearInterval(t);await this.leaseWatch?.stop();if(this.leaseWatch&&(await this.jobStore.read()).runtimeLease?.owner===this.lease){await this.jobStore.change(s=>{s.sessionResumeUntil=Date.now()+120_000;});await this.jobStore.releaseLease(this.lease);}if(!this.community)this.client.destroy();await this.store.close();}
   private async reconcileMember(id:string){return this.store.operations.shared(()=>this.reconcileMemberNow(id));}
   private async reconcileMemberNow(id:string){if(this.gateway.synchronizingRoles.has(id))return;const c=this.file.value,guild=await this.gateway.guild(),m=await guild.members.fetch({user:id,force:true});if(this.gateway.synchronizingRoles.has(id))return;
@@ -147,6 +170,7 @@ export class Runtime {
   private inMode<T>(key:string|undefined,action:()=>Promise<T>){return this.community?this.community.run(key??this.community.keys[0]!,action):action();}
   async interact(i:Interaction){
     if(i.guildId&&i.guildId!==this.file.value.community.guildId)return;
+    if(i.isRepliable()&&deferBeforeRouting(i)&&!i.deferred&&!i.replied)try{await i.deferReply({flags:MessageFlags.Ephemeral});}catch(error){console.error('Interaction acknowledgement failed:',(error as {code?:unknown}).code??'unknown');return;}
     if(!this.community)return this.interactScoped(i);
     try{const key=await this.community.select(i);return this.community.run(key,()=>this.interactScoped(this.community!.interaction(i)));}
     catch(error){if(i.isRepliable()){const content=error instanceof UserError?error.message:'This server or game mode is unavailable.';if(i.deferred||i.replied)await i.editReply({content,components:[]});else await i.reply({content,flags:MessageFlags.Ephemeral});}}
@@ -155,14 +179,14 @@ export class Runtime {
     if(!i.isRepliable())return;
     const pending=i.isButton()&&i.customId.startsWith('confirm:')?this.pending.get(i.customId.split(':')[1]!):undefined;
     if(pending?.recovery||(i.isChatInputCommand()&&i.commandName==='health'))return this.interactNow(i);
-    if(this.store.operations.recovering){await i.reply({content:'Recovery is waiting for active work or in progress. Try again after it finishes.',flags:MessageFlags.Ephemeral});return;}
+    if(this.store.operations.recovering){const content='Recovery is waiting for active work or in progress. Try again after it finishes.';if(i.deferred||i.replied)await i.editReply({content});else await i.reply({content,flags:MessageFlags.Ephemeral});return;}
     return this.store.operations.shared(()=>this.interactNow(i));
   }
   private async interactNow(i:Interaction){
     if(!i.isRepliable())return;
     try{
-      const early=(i.isChatInputCommand()&&!['stats','testerstats','testerlb'].includes(i.commandName))||(i.isButton()&&(i.customId.startsWith('support:')||i.customId.startsWith('requestclose:')||i.customId.startsWith('join:')||['waitlist','leave'].includes(i.customId)));
-      if(early)await i.deferReply({flags:MessageFlags.Ephemeral});
+      const early=(i.isChatInputCommand()&&!['stats','testerstats','testerlb'].includes(i.commandName))||(i.isButton()&&(i.customId.startsWith('activity:')||i.customId.startsWith('support:')||i.customId.startsWith('requestclose:')||i.customId.startsWith('join:')||['waitlist','leave'].includes(i.customId)));
+      if(early&&!i.deferred&&!i.replied)await i.deferReply({flags:MessageFlags.Ephemeral});
       const a=await this.actor(i);
       if(await this.wizardInteraction(i,a))return;
       if(await this.leaveInteraction(i,a))return;
@@ -189,6 +213,7 @@ export class Runtime {
       const createsRequest=(i.isButton()&&['waitlist','join','support'].includes(i.customId.split(':')[0]!))||(i.isStringSelectMenu()&&i.customId==='support')||(i.isModalSubmit()&&i.customId==='verification')||(i.isChatInputCommand()&&['start','next','forcetest','set-ticket','maketestticket'].includes(i.commandName));
       if(createsRequest){
         const support=(i.isButton()&&i.customId.startsWith('support:'))||(i.isStringSelectMenu()&&i.customId==='support')||(i.isChatInputCommand()&&i.commandName==='set-ticket'&&i.options.getString('type')!=='test');
+        if(support&&!this.file.value.supportRequestsEnabled&&!(i.isChatInputCommand()&&i.commandName==='set-ticket'))throw new UserError('New support requests are handled in the Lunar Support server.');
         const key=i.isButton()?i.customId.split(':')[1]:i.isStringSelectMenu()?i.values[0]:i.isChatInputCommand()?i.options.getString('type')??undefined:undefined;
         if(requestSetupErrors(this.file.value,this.setupErrors,support?'support':'testing',support?key:undefined).length)throw new UserError(`An administrator must finish ${support?'this support type’s':'testing'} configuration before new requests are accepted.`);
       }
@@ -203,7 +228,8 @@ export class Runtime {
       }
       if(i.isButton()){
         const [name,value]=i.customId.split(':');
-        if(name==='confirm'||name==='cancel'){const pending=this.pending.get(value!);if(!pending||pending.actor!==a.id||pending.expires<Date.now())throw new UserError('This confirmation has expired.');if(name==='cancel'){this.pending.delete(value!);reply='Cancelled.';}else{
+        if(name==='activity'){await new ActivityService(this.jobStore,()=>this.file.value).respond(a,value!,i.channelId!,i.message.id);reply='Your activity response has been recorded.';}
+        else if(name==='confirm'||name==='cancel'){const pending=this.pending.get(value!);if(!pending||pending.actor!==a.id||pending.expires<Date.now())throw new UserError('This confirmation has expired.');if(name==='cancel'){this.pending.delete(value!);reply='Cancelled.';}else{
           if(pending.group==='setup'){const s=await this.store.read();if(s.initialized)requireGroup(this.file.value,a,'owner');else if(!a.administrator)throw new UserError('Discord Administrator permission is required.');}else requireGroup(this.file.value,a,'owner');
           if(pending.fingerprint!==JSON.stringify(this.file.value))throw new UserError('Configuration changed. Review a new preview.');this.pending.delete(value!);reply=await pending.action();}}
         else if(name==='waitlist'){if(i.channelId!==this.file.value.channels.verificationPanel)throw new UserError('Use the current request-test panel.');reply=await this.service.waitlist(a);if(reply==='Your high testing ticket is being opened.'){const created=currentTicket(await this.store.read(),a.id);if(created){await this.ticketCreated(i,created.id);return;}}}
@@ -221,9 +247,11 @@ export class Runtime {
       }else if(i.isChatInputCommand()){
         const o=i.options,c=this.file.value,name=i.commandName,member=()=>o.getUser('member',true).id,str=(key:string)=>o.getString(key,true),ticket=()=>this.ticketId(i);
         switch(name){
+          case 'activity':await new ActivityGateway(this.client,this.jobStore,()=>this.file.value,this.gateway).start(a);reply='Activity notice saved and queued for posting.';break;
+          case 'cooldown':{const s=await this.jobStore.read(false),config=this.community?.master.value??c;await i.editReply({embeds:[new EmbedBuilder().setTitle('Your Testing Cooldowns').setDescription(cooldownSummary(s,config,a.id)).setColor(c.branding.colors.panel as `#${string}`)],allowedMentions:{parse:[]}});return;}
           case 'loa':{const s=await this.store.read();if(o.getSubcommand()==='end'){requireGroup(c,a,'loaAdmin');const l=currentLeave(s,member());if(!l||l.status!=='active')throw new UserError('This member has no active LOA.');await this.leave.end(a,l.id,str('reason'),true);reply='LOA ended. Role removal and notifications are queued.';}else{requireGroup(c,a,'staff');const id=o.getUser('member')?.id??a.id,canReview=id===a.id||allowed(c,a,'loaAdmin'),l=(canReview?currentLeave(s,id):undefined)??Object.values(s.leaves??{}).filter(l=>l.memberId===id&&(canReview||l.startsAt!==undefined)).sort((a,b)=>b.requestedAt-a.requestedAt)[0];if(!l){reply='No saved LOA was found.';break;}await i.editReply({embeds:[leaveEmbed(l,c)],components:l.memberId===a.id&&l.status==='pending'?[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`loa:withdraw:${l.id}`).setLabel('Withdraw Request').setStyle(ButtonStyle.Secondary))]:l.memberId===a.id&&l.status==='active'?[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`loa:end:${l.id}`).setLabel('End My LOA').setStyle(ButtonStyle.Secondary))]:[],allowedMentions:{parse:[]}});return;}break;}
           case 'health':requireGroup(c,a,'botAdmin');reply=await healthSummary(this.jobStore,c,this.startedAt,this.community?[...this.modeErrors.values()].reduce((n,e)=>n+e.length,0):this.setupErrors.length);break;
-          case 'profile':{const id=o.getUser('member')?.id??a.id,p=(await this.store.read()).players[id];if(p){const embed=new EmbedBuilder().setTitle('Player Profile').setColor(c.branding.colors.panel as `#${string}`).addFields({name:'Discord',value:`<@${id}>`},{name:'Minecraft',value:p.ign??'Not linked'},{name:'Rank',value:tierName(p.tier)},{name:'Region',value:p.region??'Not selected'});if(p.uuid)embed.setThumbnail(`https://visage.surgeplay.com/bust/128/${p.uuid}`);await i.editReply({embeds:[embed],allowedMentions:{parse:[]}});return;}reply='This player has no saved profile.';break;}
+          case 'profile':{const id=o.getUser('member')?.id??a.id,p=c.supportTargetGuildId&&this.community?await this.community.deployment.supportProfile(c.supportTargetGuildId,id):(await this.store.read()).players[id];if(p){const embed=new EmbedBuilder().setTitle('Player Profile').setColor(c.branding.colors.panel as `#${string}`).addFields({name:'Discord',value:`<@${id}>`},{name:'Minecraft',value:p.ign??'Not linked'},{name:'Rank',value:tierName(p.tier)},{name:'Region',value:p.region??'Not selected'});if(p.uuid)embed.setThumbnail(`https://visage.surgeplay.com/bust/128/${p.uuid}`);await i.editReply({embeds:[embed],allowedMentions:{parse:[]}});return;}reply='This player has no saved profile.';break;}
           case 'leave':await this.service.leave(a);break;
           case 'start':await this.service.start(a,str('region'));reply='Your testing session is active.';break;
           case 'stop':await this.service.stop(a);reply='Your testing session ended.';break;
@@ -245,7 +273,7 @@ export class Runtime {
           case 'uuid':requireGroup(c,a,'staff');{const result=await lookupMinecraft(str('ign'));reply=`${result.ign}: ${result.uuid}`;}break;
           case 'unverify':if(o.getString('scope')==='global'){requireGroup(c,a,'owner');await this.confirm(i,a,'Unlink this Minecraft account in both servers? Ranks and cooldowns remain. Open tests must be finished first.',async()=>{if(this.community){await new Backups(this.community.deployment.parent,this.community.master.value.backups.directory).create();await this.community.deployment.unlinkAll(member());}else await this.service.unverify(a,member());return 'Account unlinked. Verify again in each server.';});return;}await this.service.unverify(a,member());break;
           case 'restrict':requireGroup(c,a,'restrictionKey');{const account=await lookupMinecraft(str('ign'));await this.service.restriction(a,member(),account.uuid,str('reason'),o.getString('duration'));}break;
-          case 'unrestrict':await this.service.unrestrict(a,member());break;
+          case 'unrestrict':if(c.supportTargetGuildId&&this.community){if(!allowed(c,a,'highStaff')&&!allowed(c,a,'restrictionKey'))throw new UserError('You do not have permission to remove restrictions.');await this.community.deployment.unrestrictFromSupport(c.supportTargetGuildId,c.community.guildId!,a.id,member());}else await this.service.unrestrict(a,member());break;
           case 'forcetest':{const t=await this.service.forceTest(a,member(),str('region'));await this.ticketCreated(i,t.id);return;}
           case 'forcestopqueue':await this.service.stopQueue(a,str('region'));break;
           case 'forceresult':case 'migrate':{requireGroup(c,a,'regulator');const p=(await this.store.read()).players[member()];let ign=o.getString('ign')??undefined;if(!p?.uuid){if(!ign)throw new UserError('Provide an IGN for this unverified player.');ign=(await lookupMinecraft(ign)).ign;}await this.service.forceResult(a,member(),str('tier') as Tier,str('region'),ign,name==='migrate'?str('source'):undefined);break;}
@@ -266,9 +294,9 @@ export class Runtime {
             });return;
           }
           case 'forceclosetickets':{requireGroup(c,a,'owner');const tickets=Object.values((await this.jobStore.read()).tickets).filter(t=>t.status==='open');await this.confirm(i,a,`Discontinue and archive ${tickets.length} active tickets?`,async()=>{for(const t of tickets)await this.inMode(t.modeId,()=>this.service.close({...a,channelAccess:true},t.id,'discontinued','Owner bulk closure'));return 'Ticket closures queued.';});return;}
-          case 'addtester':case 'stoptester':{requireGroup(c,a,'botAdmin');const guild=await this.gateway.guild(),m=await guild.members.fetch(member());if(name==='addtester'){await m.roles.add([...c.permissionGroups.verifiedTester,...c.permissionGroups.staff]);await this.store.change(s=>{player(s,m.id).testerSince??=Date.now();});}else{await m.roles.remove(c.permissionGroups.verifiedTester);await this.store.change(s=>{const r=s.testers[m.id];delete s.testers[m.id];if(r&&!Object.values(s.testers).includes(r))s.queues[r]=[];enqueue(s,'queues',{},Date.now());});}break;}
+          case 'addtester':case 'stoptester':{requireGroup(c,a,'botAdmin');const guild=await this.gateway.guild(),m=await guild.members.fetch(member());if(name==='addtester'){await m.roles.add([...c.permissionGroups.verifiedTester,...c.testerUmbrellaRoleIds,...c.permissionGroups.staff]);await this.store.change(s=>{player(s,m.id).testerSince??=Date.now();});}else{await m.roles.remove(c.permissionGroups.verifiedTester);const otherTesterRoles=this.community?.master.value.gameModes.flatMap(mode=>mode.testerRoleIds)??[];if(c.testerUmbrellaRoleIds.length&&!otherTesterRoles.some(id=>m.roles.cache.has(id)))await m.roles.remove(c.testerUmbrellaRoleIds);await this.store.change(s=>{const r=s.testers[m.id];delete s.testers[m.id];if(r&&!Object.values(s.testers).includes(r))s.queues[r]=[];enqueue(s,'queues',{},Date.now());});}break;}
           case 'configquota':requireGroup(c,a,'botAdmin');{const next=structuredClone(c),n=o.getInteger('count',true);next.modules.testerQuotas=n>0;next.testing.monthlyTesterQuota=n||null;const errors=readiness(next);if(errors.length)throw new UserError(errors.join('\n'));await this.file.save(next);}break;
-          case 'configcooldown':requireGroup(c,a,'botAdmin');{milliseconds(str('duration'));const next=structuredClone(c);next.testing[o.getString('kind')==='high'?'highCooldown':'normalCooldown']=str('duration');await this.file.save(next);}break;
+          case 'configcooldown':requireGroup(c,a,'owner');{milliseconds(str('duration'));const next=structuredClone(c);next.testing[o.getString('kind')==='high'?'highCooldown':'normalCooldown']=str('duration');await this.file.save(next);}break;
           case 'stats':case 'testerstats':case 'testerlb':requireGroup(c,a,'staff');reply=await this.statistics(name,o.getUser('member')?.id??a.id,o.getString('period')??'monthly');break;
           case 'setup':{const s=await this.store.read();if(s.initialized)requireGroup(c,a,'owner');else if(!a.administrator)throw new UserError('Discord Administrator permission is required.');if(o.getSubcommand()==='wizard'){const session=this.wizard.create(c,a,s);await i.editReply(wizardView(session));return;}if(o.getSubcommand()==='preview')reply=setupPreview(c);else{await this.confirm(i,a,setupPreview(c),async()=>{const guild=await this.gateway.guild(),capacity=await setupCapacity(this.community?.master.value??this.file.value,guild);if(capacity.length)throw new UserError(capacity.join('\n'));await this.eachMode(async()=>{await provision(this.file,guild,a.id,!s.initialized);});const errors=await this.validateAll(guild);if(errors.length)return `Resources recorded. Finish configuration before enabling requests:\n${errors.join('\n')}`;await this.store.change(s=>s.initialized=true);await this.eachMode(()=>this.gateway.panels());return 'Setup completed and panels published.';},'setup');return;}break;}
           case 'config':{const s=await this.store.read();if(s.initialized)requireGroup(c,a,'owner');else if(!a.administrator)throw new UserError('Discord Administrator permission is required.');const loaded=await ConfigFile.load(this.file.path),candidate=modeConfig(loaded.value,this.community?.key??'crystal');const errors=await validateDiscord(candidate,await this.gateway.guild());if(errors.length){reply=errors.join('\n');break;}if(o.getSubcommand()==='reload'){
@@ -358,8 +386,8 @@ export class Runtime {
     const filtered=s.completions.filter(e=>{const d=dateKey(e.at,timezone);return e.at<=now&&(period==='all'||(d>=start&&d<=today));}),counts:Record<string,number>={};for(const e of filtered)counts[e.tester]=(counts[e.tester]??0)+1;
     if(command==='stats')return `<@${id}>: ${counts[id]??0} completed tests this month; ${allTimeTests(s,id)} all time.${this.file.value.modules.testerQuotas&&quotaExempt(s,id,today.slice(0,7),timezone,now)?' LOA exempt.':''}${s.legacyStatistics?.testers[id]?.undatedPeriodCount?` Legacy period total: ${s.legacyStatistics.testers[id]!.undatedPeriodCount} (month unavailable).`:''}`;
     if(period==='all')for(const [tester,total]of Object.entries(s.legacyStatistics?.testers??{}))counts[tester]=(counts[tester]??0)+total.allTimeCount;
-    if(command==='testerstats')for(const p of Object.values(s.players))if(p.testerSince)counts[p.id]??=0;
-    const rows=Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([id,n],i)=>`${i+1}. <@${id}> — ${n}${command==='testerstats'&&this.file.value.modules.testerQuotas?` / ${quotaExempt(s,id,today.slice(0,7),timezone,now)?'LOA exempt':this.file.value.testing.monthlyTesterQuota}`:''}`),visible:string[]=[];
+    const passed:Record<string,number>={};if(command==='testerstats'){for(const event of s.audit){const ticket=s.tickets[event.target];if(event.action!=='passeval'||!ticket||ticket.type!=='test'||event.at>now)continue;const date=dateKey(event.at,timezone);if(period!=='all'&&(date<start||date>today))continue;passed[event.actor]=(passed[event.actor]??0)+1;counts[event.actor]??=0;}for(const p of Object.values(s.players))if(p.testerSince)counts[p.id]??=0;}
+    const rows=Object.entries(counts).sort((a,b)=>b[1]-a[1]||(passed[b[0]]??0)-(passed[a[0]]??0)).map(([id,n],i)=>`${i+1}. <@${id}> — ${n}${command==='testerstats'&&this.file.value.modules.testerQuotas?` / ${quotaExempt(s,id,today.slice(0,7),timezone,now)?'LOA exempt':this.file.value.testing.monthlyTesterQuota}`:''}${command==='testerstats'?` · Passed evals: ${passed[id]??0}`:''}`),visible:string[]=[];
     for(const row of rows){if([...visible,row].join('\n').length>1750)break;visible.push(row);}
     return (visible.join('\n')||'No completed tests in this period.')+(visible.length<rows.length?`\nShowing ${visible.length} of ${rows.length}; use /stats for an individual tester.`:'')+(period!=='all'&&s.legacyStatistics?'\nUndated legacy totals are preserved in all-time statistics.':'');
   }

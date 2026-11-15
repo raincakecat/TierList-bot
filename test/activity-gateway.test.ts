@@ -1,0 +1,32 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {PermissionFlagsBits} from 'discord.js';
+import {configSchema} from '../src/config.js';
+import {ActivityGateway} from '../src/discord/activity-gateway.js';
+import {emptyState} from '../src/domain/types.js';
+import {MemoryAdapter,Store} from '../src/storage/store.js';
+
+test('activity notice retries an incomplete roster and sends a private, paginated report',async()=>{
+  const c=configSchema.parse(JSON.parse(await readFile('config.example.json','utf8')));
+  c.activity={enabled:true,noticeChannelId:'100000000000000001',reportChannelId:'100000000000000002',exemptRoleIds:[]};
+  c.permissionGroups.staff=['100000000000000003'];c.permissionGroups.highStaff=['100000000000000004'];c.permissionGroups.owner=['100000000000000005'];c.permissionGroups.botAdmin=['100000000000000006'];c.loa.roleId='100000000000000007';
+  const ids=Array.from({length:130},(_,i)=>String(200000000000000000n+BigInt(i)));
+  const members=new Map(ids.map((id,i)=>[id,{id,user:{bot:false},permissions:{has:()=>false},roles:{cache:new Map([[c.permissionGroups.staff[0],true],...(i===1?[[c.loa.roleId,true] as const]:[])])}}]));
+  const everyone={id:'everyone'},role={mentionable:true};let incomplete=false,disabled=false,posts=0;
+  const permission=(who:any)=>({has:(flag:any)=>who===everyone?false:typeof flag==='bigint'&&flag===PermissionFlagsBits.ViewChannel?who===role:false});
+  const notice:any={id:c.activity.noticeChannelId,permissionsFor:(who:any)=>who===role?{has:()=>true}:{has:()=>true},messages:{fetch:async()=>({edit:async()=>{disabled=true;}})}};
+  const report:any={id:c.activity.reportChannelId,permissionsFor:(who:any)=>who===everyone?{has:()=>false}:who?.id&&members.has(who.id)?permission(who):{has:()=>true}};
+  const guild:any={fetch:async()=>({memberCount:members.size+(incomplete?1:0)}),members:{fetch:async()=>members,fetchMe:async()=>({id:'bot'})},roles:{fetch:async()=>new Map([[c.permissionGroups.staff[0],role]]),everyone}};
+  const state=emptyState('100000000000000008');state.initialized=true;const store=new Store(new MemoryAdapter(state));
+  const fake:any={guild:async()=>guild,text:async(id:string)=>id===notice.id?notice:report,sendOnce:async(_ch:any,j:any,_options:any,save:any)=>{posts++;await save('messageId',String(300000000000000000n+BigInt(posts)));return {id:'300000000000000001',createdTimestamp:Date.now()-86401000,edit:async()=>{}};}};
+  const gateway=new ActivityGateway({} as any,store,()=>c,fake),actor={id:ids[0]!,roles:c.permissionGroups.highStaff,administrator:false,channelAccess:true};
+  incomplete=true;await assert.rejects(()=>gateway.start(actor),/completely/);incomplete=false;
+  const n=await gateway.start(actor);const open=(await store.read()).jobs[`activity-${n.id}-open`]!;
+  await gateway.job(open,async(k,v)=>{open.checkpoints[k]=v;});
+  const close=(await store.read()).jobs[`activity-${n.id}-close`]!;incomplete=true;
+  await assert.rejects(()=>gateway.job(close,async()=>{}),/completely/);assert.equal(disabled,true);assert.equal(posts,1);
+  incomplete=false;await gateway.job(close,async(k,v)=>{close.checkpoints[k]=v;});
+  const saved=(await store.read()).activityNotices![n.id]!;assert.equal(saved.status,'closed');assert.equal(saved.missing!.length,129);assert.deepEqual(saved.exempt,[ids[1]]);assert.ok(posts>=3);
+  await gateway.job(close,async()=>{});assert.ok(posts>=3);
+});

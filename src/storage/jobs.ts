@@ -16,7 +16,7 @@ export class Worker {
       const job=await this.store.change(s=>{const now=Date.now(),jobs=Object.values(s.jobs).sort((a,b)=>(a.createdAt??0)-(b.createdAt??0)),working=new Set(jobs.filter(j=>j.status==='working'&&(j.leaseUntil??0)>=now).map(jobKey));
         const ordered=jobs.filter(j=>j.status!=='done');
         const backgroundRunning=jobs.filter(j=>j.status==='working'&&(j.leaseUntil??0)>=now&&(j.kind==='archive'||priority(j)>=4)).length;
-        const candidates=ordered.filter((j,index)=>(this.concurrency===1||(j.kind!=='archive'&&priority(j)<4)||backgroundRunning<this.concurrency-1)&&!this.runningKeys.has(jobKey(j))&&j.nextAt<=now&&(j.status!=='working'||(j.leaseUntil??0)<now)&&!working.has(jobKey(j))&&(!['ticket:','channel:'].some(prefix=>jobKey(j).startsWith(prefix))||!ordered.slice(0,index).some(previous=>jobKey(previous)===jobKey(j))));
+        const candidates=ordered.filter((j,index)=>(this.concurrency===1||(j.kind!=='archive'&&priority(j)<4)||backgroundRunning<this.concurrency-1)&&!this.runningKeys.has(jobKey(j))&&j.nextAt<=now&&(j.status!=='working'||(j.leaseUntil??0)<now)&&!working.has(jobKey(j))&&(!['ticket:','channel:','activity:'].some(prefix=>jobKey(j).startsWith(prefix))||!ordered.slice(0,index).some(previous=>jobKey(previous)===jobKey(j))));
         const j=candidates.sort((a,b)=>priority(a)-priority(b))[0];if(!j)return null;
         if(j.checkpoints.deliveryStartedAt)j.checkpoints.recovery=true;else j.checkpoints.deliveryStartedAt=now;
         j.status='working';j.leaseUntil=now+300_000;j.checkpoints.worker=randomUUID();return structuredClone(j);});
@@ -41,6 +41,7 @@ function failureCode(error:unknown):string {
 }
 
 function jobKey(j:Job):string {
+  if(j.kind==='activity')return `activity:${String(j.data.activityId)}`;
   if(j.kind==='result')return `result:${String(j.data.ticketId??j.id)}`;
   if(j.kind==='queues'||j.kind==='lists'||j.kind==='loa')return `panel:${j.kind}`;
   if(j.data.ticketId)return `ticket:${String(j.data.ticketId)}`;

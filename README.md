@@ -1,12 +1,12 @@
-# Configurable Crystal Bot
+# Lunar Tiers Discord Bot
 
-Configurable implementation candidate for Crystal PvP verification, regional testing, tier lists, support tickets, restrictions, deadlines, and portable backups.
+Configurable Discord bot for regional tier testing, account linking, support tickets, restrictions, and backups. One application can serve a nine-mode testing server and a separate support server through one database.
 
 Version 0.2.0 adds staff Leave of Absence requests, approval controls, timed roles, notifications, and quota exemptions.
 
 **Full package:** [Download the ZIP with compiled files and PDF setup guide](full-package/full-package.zip), or [read the PDF guide](docs/Full-Setup-Guide.pdf).
 
-**Status:** 184 automated tests pass on Windows and Linux. The runtime has been deployed with Discord and SQLite; Supabase has also been exercised live. This reusable package remains an implementation candidate: rehearse your own roles, channels, database, and recovery procedures before cutover. See `docs/STATUS.md`.
+**Status:** 221 automated tests pass locally. The consolidated Crystal testing and Lunar Support configuration is deployed on the private VM. This public package contains examples and source code only; supply your own IDs and credentials. See `docs/STATUS.md`.
 
 ## Install the ready-to-run ZIP
 
@@ -29,7 +29,7 @@ Normal operation requires Manage Channels, Manage Roles, View Channel, Send Mess
 - **PostgreSQL:** set `database.backend` to `postgresql` and set `DATABASE_URL` in `.env`. The connection's account needs permission to create the private `crystal` schema and its state table. Configure TLS in the connection settings for remote databases; do not disable certificate verification.
 - **SQLite:** set `database.backend` to `sqlite`. The local file defaults to `data/crystal-bot.sqlite`. Use a local disk rather than a shared network filesystem. Node's built-in SQLite module may print its experimental warning on Node 24.
 
-Each installation uses one guild and one active process. A database lease prevents simultaneous bot processes. An unclean shutdown may require waiting up to 60 seconds before restart.
+One process can serve several guilds through `BOT_CONFIGS`, with one configuration file per guild and a shared database. A database lease prevents simultaneous bot processes. An unclean shutdown may require waiting up to 60 seconds before restart.
 
 The first persistence implementation stores a versioned community state document with atomic revision updates. This keeps all account, queue, ticket, and job changes consistent across backends. It is intended for one community per instance; large-scale data growth needs performance measurement before release. Archived channel messages live in transcript files, not in the state document.
 
@@ -42,6 +42,14 @@ Neutral branding and messages are editable through documented `{placeholders}`. 
 The private `/setup wizard` edits a draft until confirmation. Its screens cover community name/timezone, modules/regions, cooldowns/quota/capacity, and role/channel/category IDs. Blank resource mappings request creation. Drafts expire after 15 minutes; confirmations after 5 minutes. On initialized installations it requires Owner and maintenance before applying. Database credentials and the initial server ID remain host-side. Custom support policies and templates remain editable in JSON.
 
 `/health` is private to Bot Admin/Owner and reports database connectivity, uptime, recovery fencing, maintenance, saved jobs, the last successful automatic backup, and configuration problem counts. It omits credentials and raw backend errors. Legacy jobs without a creation timestamp use their scheduled time for the oldest-work indicator.
+
+Staff activity notices are optional. Enable `activity.enabled` and configure separate `activity.noticeChannelId` and `activity.reportChannelId` channels; setup can create missing channels. High Staff, Bot Admins and Owners can run `/activity start`. Staff have 24 hours from posting to respond. The private report lists nonresponders and staff with the LOA role separately, excluding staff who left or lost their staff role. A saved notice resumes after a restart; roster or permission failures are retried and reported to the operational log. Discord administrators can see private channels as a consequence of Discord permissions.
+
+`activity.exemptRoleIds` optionally lists additional role IDs exempt from activity checks. Roles are checked when the notice closes, including for notices already running; exempt staff appear separately from missing staff in the private report.
+
+`/cooldown` privately shows your cooldown for each game mode. Map `staffDashboard.channelId` to a dedicated channel visible only to Staff and High Staff for a dashboard showing ticket, queue, tester, pending LOA, and retry counts. It refreshes about once a minute. Discord Administrators retain their normal access to private channels.
+
+`/testerstats` shows passed evaluations separately alongside completed-test counts, crediting the staff member who used `/passeval`. Existing saved evaluation audit records are included when their ticket is available. Quotas and leaderboards continue to use completed-test counts.
 
 ## Testing and support
 
@@ -121,6 +129,12 @@ Missing permission roles now block only the request flows that need them; unrela
 ## Multiple servers and game modes
 
 The candidate supports a shared bot/database with isolated community and mode records. See [multi-server setup](docs/MULTI-SERVER.md) and `config.multimode.example.json`. Keep the new community in maintenance until live rehearsal passes.
+
+For the consolidated layout, start from `config.consolidated.example.json`. The main server hosts Crystal, Sword, Axe, SMP, Pot, Mace, UHC, Nethpot, and Spear Mace. Each mode has NA, EU, and AS/AU waitlist channels under three regional queue categories. One High Testing Lists forum holds a post per mode, and all modes share one results channel. The support server handles General Support, Player Reports, Staff Reports, Restriction Appeals, and Partnership Requests. Existing tickets in an old server can finish there while new requests use the support server.
+
+Set `BOT_CONFIGS` to the main config, any retiring server config, and the support config in that order. Use the same database settings in all files. Set `supportRequestsEnabled: false` and `supportRedirectUrl` in a retiring server to replace its support panel with a link. Set `supportTargetGuildId` in the support config so authorized support staff can inspect the main server profile and remove a restriction. Never commit live config files, `.env`, database files, transcripts, or deployment IDs.
+
+Queue opening requires Staff, Verified Tester, and the selected mode's Tester role. Staff can handle an assigned ticket without that mode role. Title roles can grant the shared Staff or High Staff role automatically through `staffTitles`; High Staff includes Overseer and above, while Partnership Manager is Staff but below Regulator. Support ticket visibility is set by each channel's permission overwrites; assigning a title alone does not bypass private channel rules.
 
 ## Tester and staff guides
 

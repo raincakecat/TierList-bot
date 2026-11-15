@@ -39,8 +39,7 @@ BOT ADMIN
 /health - Private database, jobs, backup, recovery and configuration health; includes state size and safe retry causes.
 /unverify member - Unlink Minecraft association; keep Discord rank/cooldown.
 /addtester member /stoptester member - Manage tester authorization.
-/resetcooldown member /setcooldown member days - Individual cooldown.
-/configcooldown kind duration - Future test cooldown; 0 disables.
+/resetcooldown member - Only if also Owner or CD Resetter.
 /configquota count - Monthly quota; 0 disables.
 /panels refresh - Refresh configured request panels/lists/queues.
 /migration preview filename - Read-only legacy import preview when enabled.
@@ -79,6 +78,8 @@ OWNER (initial setup allows Discord Administrator before initialization)
 /reset member - Reset player, preserving restrictions/archives.
 /forceresetcooldowns - Clear all cooldowns.
 /forceclosetickets - Discontinue/archive active open tickets.
+/setcooldown member days - Set one player's cooldown.
+/configcooldown kind duration - Change future test cooldown; 0 disables.
 
 Wizard changes on initialized installations require maintenance. Drafts expire after 15 minutes and confirmations after 5 minutes. Database credentials and initial server ID remain on the host. Backup restore/transfer drain active work with a 30-second waiting limit and keep maintenance enabled.
 
@@ -94,8 +95,28 @@ Queue opening: Staff + matching mode Tester role. Ticket handling/assignment: St
 /unverify scope:server (default): Bot Admin; only current server.
 /unverify scope:global: Owner, confirmation required; shared unlink preserves ranks/cooldowns.
 /allcdreset and /forceclosetickets: Owner, all modes in current server only.
+/resetcooldown: Owner or CD Resetter; select a mode outside a testing ticket in a multi-mode server.
+/setcooldown and /configcooldown: Owner only.
 /purgehightests start [mode]: Owner, optional mode narrows current-server purge.
 /setup wizard [mode]: Discord Administrator before initialization, Owner afterward.
+/activity start: High Staff, Bot Admin, or Owner. Starts a 24-hour staff activity notice and posts a private missing/LOA report when it closes.
+/cooldown: Everyone. Privately shows your testing cooldowns in the current server.
+
+CONSOLIDATED MAIN SERVER
+Modes: Crystal, Sword, Axe, SMP, Pot, Mace, UHC, Nethpot, Spear Mace.
+Queue opening requires Staff + Verified Tester + that mode's Tester role.
+Staff may handle assigned test tickets without the selected mode's Tester role.
+The three regional queue categories each contain nine mode waitlist channels.
+High Testing Lists has one managed forum post per mode; all results use one channel.
+
+LUNAR SUPPORT SERVER
+General Support: Staff can view and close; Staff can view its archive.
+Player Reports: Regulator and above handle live tickets; High Staff views the archive.
+Staff Reports and Restriction Appeals: High Staff only for live and archive access.
+Partnership Requests: Partnership Manager handles live tickets; Partnership Manager and Regulator+ view the archive.
+/profile reads the main server's shared player profile when used in Support.
+/unrestrict in Support: High Staff or Restriction Key; records the action in both servers.
+New support requests use Support's panel. Old open tickets remain in their original server until closed.
 /backup export/restore: Owner, all current-server modes; restore rejects cross-server identity conflicts.
 /backup transfer: Owner, entire deployment, maintenance required in every server.
 

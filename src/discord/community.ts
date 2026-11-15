@@ -20,8 +20,9 @@ export class Community extends ModeScope {
   configs():Config[]{return this.keys.map(key=>modeConfig(this.master.value,key));}
   async select(i:Interaction):Promise<string>{
     if('customId'in i&&i.customId.startsWith('m:')){const key=i.customId.split(':')[1]!;if(!this.keys.includes(key))throw new UserError('This game mode is no longer available.');return key;}
+    if('customId'in i&&(i.customId==='verify'||i.customId.startsWith('loa:')||i.customId.startsWith('activity:')))return this.keys[0]!;
     if(i.isChatInputCommand()){const key=i.options.getString('mode');if(key){if(!this.keys.includes(key))throw new UserError('Choose an enabled game mode.');return key;}}
-    if(i.isChatInputCommand()&&['loa','health','unverify','restrict','unrestrict','allcdreset','forceresetcooldowns','forceclosetickets','maintenance','setup','config','panels','backup','migration'].includes(i.commandName))return this.keys[0]!;
+    if(i.isChatInputCommand()&&['cooldown','activity','loa','health','unverify','restrict','unrestrict','allcdreset','forceresetcooldowns','forceclosetickets','maintenance','setup','config','panels','backup','migration'].includes(i.commandName))return this.keys[0]!;
     const state=await this.guildStore.read(false);
     const ticket=Object.values(state.tickets).find(t=>t.channelId===i.channelId&&t.status!=='closed');
     if(ticket)return ticket.modeId??this.keys[0]!;

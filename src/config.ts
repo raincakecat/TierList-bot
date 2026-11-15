@@ -14,6 +14,11 @@ export const configSchema = z.object({
   schemaVersion:z.literal(1),
   gameModes:z.array(modeSchema).max(20).default([]),
   queueLayout:z.enum(['per-mode','regional']).default('per-mode'),
+  testerUmbrellaRoleIds:ids.default([]),
+  supportTargetGuildId:id.default(null),
+  supportRequestsEnabled:z.boolean().default(true),
+  supportRedirectUrl:z.url().nullable().default(null),
+  staffTitles:z.object({staffRoleIds:ids.default([]),highStaffRoleIds:ids.default([])}).strict().default({staffRoleIds:[],highStaffRoleIds:[]}),
   activeMode:z.object({key:z.string(),name:z.string()}).optional(),
   modeForum:z.object({enabled:z.boolean(),channelId:id,threadIds:z.record(z.string(),z.string()).default({})}).strict().default({enabled:false,channelId:null,threadIds:{}}),
   community:z.object({guildId:id,name:z.string().min(1).max(100),timezone:z.string().refine(v=>{try{new Intl.DateTimeFormat('en',{timeZone:v});return true;}catch{return false;}},'Invalid timezone')}).strict(),
@@ -22,6 +27,8 @@ export const configSchema = z.object({
   permissionGroups:z.object(Object.fromEntries(GROUPS.map(k=>[k,['loaAdmin','cdResetter'].includes(k)?ids.default([]):ids])) as Record<Group,typeof ids>).strict(),
   ticketNotifications:z.object({highTestingRoleIds:ids.nullable().default(null),supportRoleIds:ids.nullable().default(null)}).strict().default({highTestingRoleIds:null,supportRoleIds:null}),
   loa:z.object({roleId:id}).strict().default({roleId:null}),
+  activity:z.object({enabled:z.boolean().default(false),noticeChannelId:id,reportChannelId:id,exemptRoleIds:ids.default([])}).strict().default({enabled:false,noticeChannelId:null,reportChannelId:null,exemptRoleIds:[]}),
+  staffDashboard:z.object({channelId:id}).strict().default({channelId:null}),
   restriction:z.object({roleId:id}).strict().default({roleId:null}),
   regions:z.object({NA:regionSchema,EU:regionSchema,AS:regionSchema}).strict(),
   tierRoleIds:z.object({LT5:id,HT5:id,LT4:id,HT4:id,LT3:id,HT3:id,LT2:id,HT2:id,LT1:id,HT1:id.default(null)}).strict(),
@@ -50,6 +57,7 @@ export function readiness(c:Config):string[] {
   if(new Set(c.gameModes.map(m=>m.key)).size!==c.gameModes.length)errors.push('Game mode keys must be unique');
   const need=(v:unknown,name:string)=>{if(v===null || (Array.isArray(v)&&!v.length))errors.push(`${name} is not configured`);};
   need(c.community.guildId,'community.guildId');need(c.permissionGroups.owner,'permissionGroups.owner');need(c.permissionGroups.botAdmin,'permissionGroups.botAdmin');
+  if(c.activity.enabled){need(c.activity.noticeChannelId,'activity.noticeChannelId');need(c.activity.reportChannelId,'activity.reportChannelId');need(c.permissionGroups.staff,'permissionGroups.staff');need(c.loa.roleId,'loa.roleId');if(c.activity.noticeChannelId&&c.activity.noticeChannelId===c.activity.reportChannelId)errors.push('Activity notice and report channels must be separate');}
   for(const key of ['staffActionLog','operationalLog','botReview'] as const)need(c.channels[key],`channels.${key}`);
   if((c.modules.tierLists||c.modules.testerQuotas)&&!c.modules.testing)errors.push('Lists and quotas require testing');
   if(c.modules.testing){

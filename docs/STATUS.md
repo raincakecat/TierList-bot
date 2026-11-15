@@ -1,3 +1,7 @@
+## Consolidated deployment - 2026-11-15
+
+221 automated tests pass locally. The private deployment now runs nine testing modes in the main server and five support ticket types in a separate support server through one database. The Project Lunar testing partitions were transferred after its final open test was archived. Existing support tickets in the older servers remain there until they close. The nine high-list forum posts, 27 waitlist panels, one results mapping, support panel, role hierarchy, and channel access were checked live. The old Crystal high-list messages were backed up before their channels were retired. Public examples contain no live IDs or member data.
+
 ## Multi-mode candidate - 2026-11-03
 
 207 automated tests pass on Windows and Linux. Multi-server routing, independent mode state, shared UUID checks, scoped administrative actions, forum recovery and capacity checks are implemented locally. The isolated live Discord API rehearsal passed and the two-server build is deployed. The second server uses three regional queue categories, with eight mode channels in each. See SECOND-SERVER-REHEARSAL.md for completed checks and remaining staff-account checks. See MULTI-SERVER.md.

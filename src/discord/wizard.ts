@@ -14,6 +14,10 @@ export function wizardResources(c:Config):Resource[]{
   add('ticketNotifications.highTestingRoleIds','High-test notification roles',true);
   add('ticketNotifications.supportRoleIds','Support notification roles',true);
   add('loa.roleId','Role: LOA');
+  add('activity.noticeChannelId','Staff activity notice channel');
+  add('activity.reportChannelId','Private activity report channel');
+  add('activity.exemptRoleIds','Activity exemption roles',true);
+  add('staffDashboard.channelId','Private staff dashboard channel');
   add('restriction.roleId','Optional role: Restricted');
   add('categories.highTests','Category: High Tests');add('categories.overflow','Categories: Overflow',true);
   if(c.modeForum.enabled)add('modeForum.channelId','Forum: High Testing Lists');

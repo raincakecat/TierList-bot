@@ -96,6 +96,24 @@ export class SharedDeployment {
   constructor(readonly parent:Store){}
   async attach(guild:string,mode:string){await this.parent.change(root=>{if(guild!==root.guildId&&!root.servers?.[guild])(root.servers??={})[guild]={...emptyState(guild),maintenance:true};const s=rawGuild(root,guild);s.defaultModeId??=mode;validateIdentities(root);});}
   guildStore(guild:string){return new Store(new ScopedAdapter(this.parent,guild),this.parent.operations);}
+  async supportProfile(guild:string,id:string){const root=await this.parent.read(false),source=guildSnapshot(root,guild);return source.players[id]??null;}
+  async unrestrictFromSupport(sourceGuild:string,supportGuild:string,actor:string,id:string){
+    if(sourceGuild===supportGuild)throw new UserError('Support and testing servers must be separate.');
+    return this.parent.change(root=>{
+      const source=rawGuild(root,sourceGuild),support=rawGuild(root,supportGuild);
+      if((sourceGuild!==root.guildId&&!root.servers?.[sourceGuild])||!source.initialized||!support.initialized)throw new UserError('Support or testing server is unavailable.');
+      const removed=source.restrictions.filter(r=>r.playerId===id);
+      if(!removed.length)throw new UserError('No restriction was found for this player.');
+      source.restrictions=source.restrictions.filter(r=>r.playerId!==id);
+      for(const mode of [source.defaultModeId??'crystal',...Object.keys(source.modes??{})]){
+        const ranks=partition(source,mode),previous=[...removed].reverse().map(r=>r.previousTiers?.[mode]??(mode===(source.defaultModeId??'crystal')?r.previousTier:undefined)).find(Boolean);
+        if(previous&&ranks.players[id])ranks.players[id]!.tier=previous;
+        addJob(source,mode,'roles',id);addJob(source,mode,'lists');
+      }
+      const at=Date.now(),event={id:randomUUID(),at,actor,action:'support-unrestrict',target:id};
+      source.audit.push(event);support.audit.push({...event,id:randomUUID(),action:'crystal-unrestrict'});
+    });
+  }
   modeStore(guild:string,key:string,name?:string){return new Store(new ScopedAdapter(this.parent,guild,key,name),this.parent.operations);}
   async unlinkAll(id:string){await this.parent.change(root=>{
     const guilds=[root,...Object.values(root.servers??{})];if(guilds.some(s=>Object.values(s.tickets).some(t=>t.opener===id&&t.type==='test'&&t.status!=='closed')))throw new UserError('Finish open tests in both servers before globally unlinking.');

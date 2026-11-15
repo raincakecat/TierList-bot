@@ -6,8 +6,10 @@ const rank=(o:SlashCommandStringOption)=>o.setName('tier').setDescription('Tier'
 const cmd=(name:string,description:string)=>new SlashCommandBuilder().setName(name).setDescription(description).setContexts(0);
 export function commandDefinitions(config?:Config){
   const commands=[
+    cmd('activity','Start a 24-hour staff activity notice').addSubcommand(s=>s.setName('start').setDescription('Post a 24-hour activity notice')),
     cmd('loa','Leave of absence status and administration').addSubcommand(s=>s.setName('status').setDescription('View a saved LOA').addUserOption(o=>o.setName('member').setDescription('Staff member'))).addSubcommand(s=>s.setName('end').setDescription('End an active LOA as an LOA Admin').addUserOption(o=>o.setName('member').setDescription('Staff member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Required reason').setRequired(true).setMaxLength(1000))),
     cmd('health','View private database, job and backup health'),
+    cmd('cooldown','Check your testing cooldowns privately'),
     cmd('profile','View a player profile').addUserOption(o=>o.setName('member').setDescription('Player')),
     cmd('leave','Leave your active queue'),
     cmd('start','Start a testing session').addStringOption(regions),cmd('stop','End your testing session'),cmd('next','Open the next queued test'),
@@ -52,12 +54,16 @@ export function commandDefinitions(config?:Config){
   for(const name of ['forceresult','migrate']){const c=cmd(name,name==='migrate'?'Assign a migrated rank':'Force a rank assignment').addUserOption(o=>o.setName('member').setDescription('Player').setRequired(true)).addStringOption(rank).addStringOption(regions);if(name==='migrate')c.addStringOption(o=>o.setName('source').setDescription('Source community').setRequired(true));c.addStringOption(o=>o.setName('ign').setDescription('Required for an unverified player').setMaxLength(16));commands.push(c);}
   for(const tier of ['ht3','lt2','ht2','lt1'])commands.push(cmd(`${tier}list`,`${tier.toUpperCase()} list management`).addSubcommand(s=>s.setName('list').setDescription('View current members')).addSubcommand(s=>s.setName('add').setDescription('Add a member').addUserOption(o=>o.setName('member').setDescription('Player').setRequired(true)).addStringOption(regions)).addSubcommand(s=>s.setName('remove').setDescription('Remove a member').addUserOption(o=>o.setName('member').setDescription('Player').setRequired(true)).addStringOption(regions)));
   const rows=commands.map(c=>c.toJSON());
+  if(config&&!config.modules.testing){
+    const supportCommands=new Set(['health','profile','forceclose','ticketclose','requestclose','deadline','add','remove','rename','uuid','unrestrict','maintenance','setup','config','panels','backup','set-ticket','changeticket']);
+    return rows.filter(row=>supportCommands.has(row.name));
+  }
   if(config&&config.gameModes.length>1){
     const option=(required:boolean)=>new SlashCommandStringOption().setName('mode').setDescription('Game mode').setRequired(required).addChoices(...config.gameModes.map(m=>({name:m.name,value:m.key}))).toJSON();
     const scoped=new Set(['start','leave','forcetest','forcestopqueue','forceresult','migrate','resetcooldown','setcooldown','configcooldown','profile','addtester','stoptester','reset','stats','testerstats','testerlb','maketestticket','set-ticket','changeticket']);
     for(const row of rows){
       if(scoped.has(row.name)){(row.options??=[]).push(option(row.name==='start'));row.options.sort((a,b)=>Number('required'in b&&b.required)-Number('required'in a&&a.required));}
-      if(/^(ht3|lt2|ht2|lt1)list$/.test(row.name))for(const sub of row.options??[])if(sub.type===1){(sub.options??=[]).push(option(false));sub.options.sort((a,b)=>Number('required'in b&&b.required)-Number('required'in a&&a.required));}
+      if(/^(ht3|lt2|ht2|lt1)list$/.test(row.name))for(const sub of row.options??[])if(sub.type===1){(sub.options??=[]).push(option(true));sub.options.sort((a,b)=>Number('required'in b&&b.required)-Number('required'in a&&a.required));}
       if(['setup','purgehightests'].includes(row.name))for(const sub of row.options??[])if(sub.type===1)(sub.options??=[]).push(option(false));
     }
   }

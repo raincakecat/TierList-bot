@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { ChannelType, Collection, type Client, type Interaction } from 'discord.js';
 import { ConfigFile, configSchema } from '../src/config.js';
 import { Store, MemoryAdapter } from '../src/storage/store.js';
-import { Runtime } from '../src/discord/runtime.js';
-import { emptyState, type Actor } from '../src/domain/types.js';
+import { Runtime, timerWorkDue } from '../src/discord/runtime.js';
+import { emptyState, UserError, type Actor } from '../src/domain/types.js';
 
 const GUILD='100000000000000001',ROLE='100000000000000002',TEXT='100000000000000003',CATEGORY='100000000000000004',USER='100000000000000005';
 async function harness(initialized=false){const c=configSchema.parse(JSON.parse(await readFile('config.example.json','utf8')));c.community.guildId=GUILD;for(const key of Object.keys(c.modules) as (keyof typeof c.modules)[])c.modules[key]=false;for(const key of Object.keys(c.permissionGroups) as (keyof typeof c.permissionGroups)[])c.permissionGroups[key]=[ROLE];for(const key of Object.keys(c.tierRoleIds) as (keyof typeof c.tierRoleIds)[])c.tierRoleIds[key]=ROLE;for(const r of Object.values(c.regions)){r.regionRoleId=ROLE;r.waitlistRoleId=ROLE;r.queueChannelId=TEXT;r.testCategoryId=CATEGORY;}for(const key of Object.keys(c.channels) as (keyof typeof c.channels)[])c.channels[key]=TEXT;for(const t of c.supportTicketTypes){t.categoryId=CATEGORY;t.archiveChannelId=TEXT;}c.categories.highTests=CATEGORY;
@@ -44,6 +44,12 @@ test('support buttons open one ticket and reject duplicates, stale channels, and
 
 
 test('slash commands acknowledge before member permission lookup begins',async()=>{const f=await harness();try{const click=interaction('command','profile');const internals=f.runtime as unknown as {actor:()=>Promise<Actor>};internals.actor=async()=>{assert.equal(click.calls[0]!.method,'defer');return{id:USER,roles:[],administrator:false,channelAccess:true};};await f.runtime.interact(click.i);assert.equal(click.calls.filter(c=>c.method==='defer').length,1);}finally{await rm(f.dir,{recursive:true});}});
+
+test('tester stats show passed evaluations separately even after the high test closes',async()=>{const f=await harness(true);try{await f.store.change(s=>{s.tickets.test={id:'test',type:'test',status:'open'} as typeof s.tickets[string];s.audit.push({id:'a',at:Date.now(),actor:USER,action:'passeval',target:'test'});});const before=interaction('command','testerstats');await f.runtime.interact(before.i);assert.match(JSON.stringify(before.calls),/0 · Passed evals: 1/);await f.store.change(s=>{s.tickets.test!.status='closed';s.completions.push({ticketId:'test',tester:USER,at:Date.now()});});const after=interaction('command','testerstats');await f.runtime.interact(after.i);assert.match(JSON.stringify(after.calls),/1 · Passed evals: 1/);}finally{await rm(f.dir,{recursive:true});}});
+
+test('multi-mode routing acknowledges before accessing state and reports routing errors privately',async()=>{const f=await harness();try{const click=interaction('command','forcetest'),internal=f.runtime as unknown as {community:unknown};internal.community={select:async()=>{assert.equal(click.calls[0]?.method,'defer');throw new UserError('Select a game mode.');}};await f.runtime.interact(click.i);assert.equal(click.calls.filter(c=>c.method==='defer').length,1);assert.match(JSON.stringify(click.calls),/Select a game mode/);}finally{await rm(f.dir,{recursive:true});}});
+
+test('timer checks skip idle state and still detect due leave, restrictions and ticket deadlines',()=>{const s=emptyState(GUILD),now=1000;assert.deepEqual(timerWorkDue(s,now),{testing:false,leave:false});s.restrictions.push({id:'r',playerId:USER,uuid:'x',reason:'x',until:now,actor:USER});assert.equal(timerWorkDue(s,now).testing,true);s.restrictions=[];s.leaves={l:{id:'l',memberId:USER,username:'u',days:1,reason:'r',status:'active',requestedAt:0,endsAt:now,roleId:ROLE,reviewChannelId:TEXT,acceptedChannelId:TEXT,adminRoles:[]}};assert.equal(timerWorkDue(s,now).leave,true);});
 
 test('requestclose buttons stay opener-only and use the persisted request after restart',async()=>{const f=await harness(true);try{f.file.value.modules.supportTickets=true;const kind=f.file.value.supportTicketTypes[0]!;kind.enabled=true;kind.closingGroups=['staff'];await f.store.change(s=>s.maintenance=false);
  const support=interaction('button',`support:${kind.key}`);await f.runtime.interact(support.i);let t=Object.values((await f.store.read()).tickets)[0]!;await f.store.change(s=>{s.tickets[t.id]!.status='open';s.tickets[t.id]!.channelId=TEXT;});
