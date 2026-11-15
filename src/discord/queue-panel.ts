@@ -15,7 +15,7 @@ export function queuePanels(c:Config,s:State,r:Region){
       .setTitle((c.activeMode?`${c.activeMode.name} · ${r==='AS'?'AS/AU':r} — `:'')+(open?'Tester(s) Available!':'No Testers Online')+(pages.length>1?` (${page+1}/${pages.length})`:''))
       .setDescription(description).setColor(c.branding.colors.panel as `#${string}`);
     if(!open)embed.addFields({name:'Last testing session',value:last?`<t:${Math.floor(last/1000)}:f>`:'Not recorded yet.'});
-    return {embeds:[embed],components:open&&!page?[new ActionRowBuilder<ButtonBuilder>().addComponents(
+    return {content:open?undefined:'',embeds:[embed],components:open&&!page?[new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId(c.activeMode?`m:${c.activeMode.key}:join:${r}`:`join:${r}`).setLabel('Join Queue').setStyle(ButtonStyle.Primary))]:[]};
   });
 }

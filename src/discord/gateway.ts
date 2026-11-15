@@ -122,10 +122,13 @@ export class Gateway {
       const sessionAt=Number(j.data.sessionAt??s.lastTestingSession?.[region]??0);
       if(!REGIONS.includes(region)||!this.config.modules.testing||!this.config.regions[region].enabled||s.maintenance||!Object.values(s.testers).includes(region)||(s.lastTestingSession?.[region]??0)!==sessionAt)return;
       const role=this.config.regions[region].waitlistRoleId;if(!role)throw new Error('Regional waitlist role is not configured');
-      const message=await this.sendOnce(ch,j,{content:`<@&${role}>`,allowedMentions:{parse:[],roles:[role]}},save);
-      await this.store.change(s=>{s.panels[`queue-ping:${region}:${sessionAt}:${ch.id}:${j.id}`]=message.id;});
+      const panel=queuePanels(this.config,s,region)[0]!;
+      const message=await this.sendOnce(ch,j,{...panel,content:`<@&${role}>`,allowedMentions:{parse:[],roles:[role]}},save);
+      const oldId=await this.store.change(state=>{const key=`queue:${region}`,previous=state.panels[key];state.panels[key]=message.id;return previous;});
+      this.panelCache.delete(`queue:${region}`);
+      if(oldId&&oldId!==message.id)try{await (await ch.messages.fetch(oldId)).delete();}catch(error){if((error as {code?:number}).code!==10008)throw error;}
       await save('pingRegistered',true);
-      await this.store.change(s=>{enqueue(s,'queues',{},Date.now());});return;
+      await this.store.change(state=>{enqueue(state,'queues',{},Date.now());});return;
     }
     if(t&&['close-request','close-request-update'].includes(String(j.data.event))){
       const r=t.closeRequests?.find(r=>r.id===j.data.requestId);if(!r)return;
@@ -208,7 +211,9 @@ export class Gateway {
     const snapshot=await this.store.read(false);
     for(const key of Object.keys(snapshot.panels).filter(key=>key.startsWith('queue-ping:'))){
       const [,region,sessionAt,channelId]=key.split(':');const r=region as typeof REGIONS[number],current=await this.store.read(false);
-      if(!REGIONS.includes(r)||!c.modules.testing||!c.regions[r].enabled||current.maintenance||!Object.values(current.testers).includes(r)||(current.lastTestingSession?.[r]??0)!==Number(sessionAt))await this.removePanelPages(key,new Set(),channelId!);
+      const active=REGIONS.includes(r)&&c.modules.testing&&c.regions[r].enabled&&!current.maintenance&&Object.values(current.testers).includes(r)&&(current.lastTestingSession?.[r]??0)===Number(sessionAt);
+      if(active){const panelId=current.panels[`queue:${r}`],role=c.regions[r].waitlistRoleId;if(!panelId||!role)continue;const channel=await this.text(channelId!);try{await (await channel.messages.fetch(panelId)).edit({content:`<@&${role}>`,allowedMentions:{parse:[]}});}catch(error){if((error as {code?:number}).code===10008)continue;throw error;}}
+      await this.removePanelPages(key,new Set(),channelId!);
     }
     if(!c.modules.testing)return;const s=await this.store.read(false);for(const r of REGIONS)if(c.regions[r].enabled){
     const pages=queuePanels(c,s,r),keep=new Set<string>();for(let page=0;page<pages.length;page++){const key=page?`queue:${r}:${page}`:`queue:${r}`;keep.add(key);
