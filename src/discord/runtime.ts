@@ -5,7 +5,7 @@ import {highTestPurgePlan,queueHighTestPurge,purgeProgress} from '../domain/high
 import { randomUUID, createHash } from 'node:crypto';
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { join, basename } from 'node:path';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, MessageFlags, ModalBuilder, PermissionFlagsBits, REST, Routes, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, type Client, type GuildMember, type Interaction } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, GuildMember, MessageFlags, ModalBuilder, PermissionFlagsBits, REST, Routes, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, type Client, type Interaction } from 'discord.js';
 import { ConfigFile, milliseconds, readiness } from '../config.js';
 import { Service, compactCompletedJobs, currentTicket, enqueue, listTiers, player, removeQueue, restricted, syncLists, tierName } from '../domain/service.js';
 import { dateKey, periodStart, previousMonth } from '../domain/calendar.js';
@@ -142,7 +142,7 @@ export class Runtime {
   }
   private async actor(i:Interaction):Promise<Actor>{
     if(i.guildId!==this.file.value.community.guildId||!i.guild)throw new UserError('This action is only available in the configured server.');
-    const member=await i.guild.members.fetch({user:i.user.id,force:true});const channel=i.channelId?(i.guild.channels.cache?.get(i.channelId)??await i.guild.channels.fetch(i.channelId)):null;
+    const member=i.member instanceof GuildMember?i.member:await i.guild.members.fetch({user:i.user.id,force:true});const channel=i.channelId?(i.guild.channels.cache?.get(i.channelId)??await i.guild.channels.fetch(i.channelId)):null;
     return {id:i.user.id,roles:[...member.roles.cache.keys()],administrator:member.permissions.has(PermissionFlagsBits.Administrator),channelAccess:!!channel?.permissionsFor(member)?.has(PermissionFlagsBits.ViewChannel)};
   }
   private async ticketId(i:Interaction){const t=Object.values((await this.store.read()).tickets).find(t=>t.channelId===i.channelId&&t.status!=='closed');if(!t)throw new UserError('This channel is not a registered ticket.');return t.id;}
