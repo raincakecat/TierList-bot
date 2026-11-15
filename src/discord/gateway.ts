@@ -14,6 +14,7 @@ import { rolesFor } from '../domain/permissions.js';
 import type { Store } from '../storage/store.js';
 import { LeaveGateway } from './loa-gateway.js';
 import {ActivityGateway} from './activity-gateway.js';
+import {supportPanelEmbed} from './support-surfaces.js';
 
 export class Gateway {
   public synchronizingRoles=new Set<string>();
@@ -185,7 +186,7 @@ export class Gateway {
     for(let page=0;page<Math.ceil(kinds.length/15);page++){
       const key=`support:${page}`,slice=kinds.slice(page*15,page*15+15),components:ActionRowBuilder<ButtonBuilder>[]=[];keep.add(key);
       for(let offset=0;offset<slice.length;offset+=3)components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(slice.slice(offset,offset+3).map(t=>new ButtonBuilder().setCustomId(`support:${t.key}`).setLabel(t.name).setStyle(t.key==='general-support'?ButtonStyle.Primary:ButtonStyle.Secondary))));
-      await this.upsertPanel(key,channel,{embeds:[new EmbedBuilder().setTitle('Contact Support').setDescription(render(c.templates.supportPanel,{communityName:c.community.name})).setColor(c.branding.colors.panel as `#${string}`)],components});
+      await this.upsertPanel(key,channel,{embeds:[supportPanelEmbed(c,c.branding.iconUrl??this.client.user?.displayAvatarURL({size:256}))],components});
     }await this.removePanelPages('support',keep,channel.id);
   }
   async leavePanels(){const c=this.config,s=await this.store.read(false);if(!c.channels.requestLoa||(!c.modules.loa&&!s.panels.loa))return;const channel=await this.text(c.channels.requestLoa);
