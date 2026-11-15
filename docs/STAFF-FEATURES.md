@@ -43,6 +43,8 @@ The username check confirms the Minecraft account exists; it doesn’t prove the
 **Support tickets**
 The bot also handles General Support, Player Reports, Staff Reports, Restriction Appeals and Partnership Requests. More ticket types can be configured, along with their opening messages, staff access, pings and who can close them.
 
+In Lunar Support, General Support pings Ticket Support. Staff Reports are Manager and above; Overseer cannot view them. The support Tester role has Mod-level Staff access. Configured main-server tester, tier, and staff roles sync into matching support roles, while manually added Ticket Support roles are kept.
+
 - Support opening messages are pinned, and the opener and responsible team are pinged.
 - Tickets stay private to the people and teams meant to see them.
 - If a category fills up, the bot uses overflow categories while keeping the ticket’s access rules.

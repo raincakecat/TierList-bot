@@ -3,6 +3,7 @@ import {ConfigFile, type Config} from './config.js';
 
 export const OTHER_MODES=[['sword','Sword'],['axe','Axe'],['smp','SMP'],['pot','Pot'],['mace','Mace'],['uhc','UHC'],['nethpot','Nethpot'],['spear-mace','Spear Mace']] as const;
 export function modeKeys(c:Config){return c.gameModes.length?c.gameModes.map(m=>m.key):['crystal'];}
+export function testerRolesForMode(c:Config,key:string){return c.gameModes.length?c.gameModes.find(m=>m.key===key)?.testerRoleIds??[]:c.permissionGroups.verifiedTester;}
 export function modeConfig(c:Config,key:string):Config{
   const mode=c.gameModes.find(m=>m.key===key);if(!mode)return c;
   const result=structuredClone(c);result.activeMode={key:mode.key,name:mode.name};

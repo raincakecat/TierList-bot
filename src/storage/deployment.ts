@@ -100,6 +100,10 @@ export class SharedDeployment {
   async attach(guild:string,mode:string){await this.parent.change(root=>{if(guild!==root.guildId&&!root.servers?.[guild])(root.servers??={})[guild]={...emptyState(guild),maintenance:true};const s=rawGuild(root,guild);s.defaultModeId??=mode;validateIdentities(root);});}
   guildStore(guild:string){return new Store(new ScopedAdapter(this.parent,guild),this.parent.operations);}
   async supportProfile(guild:string,id:string){const root=await this.parent.read(false),source=guildSnapshot(root,guild);return source.players[id]??null;}
+  async profileRanks(guild:string,id:string){const root=await this.parent.read(false),source=guildSnapshot(root,guild),config=this.configs.find(file=>file.value.community.guildId===guild)?.value;
+    const keys=config?.gameModes.length?config.gameModes.map(mode=>({key:mode.key,name:mode.name})):[{key:source.defaultModeId??'crystal',name:'Crystal'}];
+    return {player:source.players[id]??null,ranks:keys.map(mode=>({name:mode.name,tier:(mode.key===(source.defaultModeId??'crystal')?source.players[id]:source.modes?.[mode.key]?.players[id])?.tier??'Unranked'}))};
+  }
   async migrateFromSupport(targetGuild:string,supportGuild:string,actor:Actor,id:string,mode:string,tier:Tier,region:string,ign:string|undefined,source:string){
     const target=this.configs.find(f=>f.value.community.guildId===targetGuild)?.value;
     const support=this.configs.find(f=>f.value.community.guildId===supportGuild)?.value;

@@ -9,12 +9,14 @@ import {commandDefinitions} from '../src/discord/commands.js';
 import {Backups} from '../src/storage/backups.js';
 import {type Interaction} from 'discord.js';
 import {configSchema,ConfigFile} from '../src/config.js';
-import {ModeScope,modeConfig} from '../src/modes.js';
+import {ModeScope,modeConfig,testerRolesForMode} from '../src/modes.js';
 import {emptyState,type Actor} from '../src/domain/types.js';
 import {Store,MemoryAdapter} from '../src/storage/store.js';
 import {SharedDeployment,ContextStore} from '../src/storage/deployment.js';
 import {Service} from '../src/domain/service.js';
 import {validateState} from '../src/storage/backups.js';
+
+test('addtester selects only the requested mode tester role',async()=>{const c=configSchema.parse(JSON.parse(await readFile('config.consolidated.example.json','utf8')));c.gameModes.find(m=>m.key==='crystal')!.testerRoleIds=['100000000000000011'];c.gameModes.find(m=>m.key==='sword')!.testerRoleIds=['100000000000000012'];c.gameModes.find(m=>m.key==='axe')!.testerRoleIds=['100000000000000013'];assert.deepEqual(testerRolesForMode(c,'sword'),['100000000000000012']);assert.deepEqual(testerRolesForMode(c,'crystal'),['100000000000000011']);});
 const A='100000000000000001',B='100000000000000002',P='100000000000000003',Q='100000000000000004',ROLE='100000000000000005',STAFF='100000000000000006';
 const owner:Actor={id:STAFF,roles:[ROLE],administrator:false,channelAccess:true},member:Actor={id:P,roles:[],administrator:false};
 async function fixture(){
@@ -41,7 +43,7 @@ test('routing uses explicit mode, ticket mode and active session, and rejects am
  const interaction=(commandName:string,channelId:string,mode:string|null=null)=>({commandName,channelId,user:{id:STAFF},options:{getString:()=>mode},isChatInputCommand:()=>true}) as unknown as Interaction;
  assert.equal(await community.select(interaction('start',P,'axe')),'axe');
  await f.service.verify(member,{uuid:'a'.repeat(32),ign:'Player'},'NA','server');await f.scope.run('axe',()=>f.service.forceTest(owner,P,'NA'));const ticket=Object.values((await f.guild.read()).tickets)[0]!;await f.guild.change(s=>s.tickets[ticket.id]!.channelId=Q);
- assert.equal(await community.select(interaction('format',Q)),'axe');await assert.rejects(community.select(interaction('profile',STAFF)),/Select a game mode/);
+ assert.equal(await community.select(interaction('format',Q)),'axe');assert.equal(await community.select(interaction('profile',STAFF)),'sword');
  await f.scope.run('axe',()=>f.service.start(owner,'EU'));assert.equal(await community.select(interaction('next',STAFF)),'axe');
  assert.equal(await community.select({customId:'m:axe:join:NA'} as Interaction),'axe');await assert.rejects(community.select({customId:'m:removed:join:NA'} as Interaction),/no longer available/);
  const calls:unknown[]=[];const raw={customId:'m:axe:join:NA',editReply:async(payload:unknown)=>calls.push(payload)} as unknown as Interaction;

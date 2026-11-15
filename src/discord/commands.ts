@@ -65,7 +65,7 @@ export function commandDefinitions(config?:Config){
   }
   if(config&&config.gameModes.length>1){
     const option=(required:boolean)=>new SlashCommandStringOption().setName('mode').setDescription('Game mode').setRequired(required).addChoices(...config.gameModes.map(m=>({name:m.name,value:m.key}))).toJSON();
-    const scoped=new Set(['start','leave','forcetest','forcestopqueue','forceresult','migrate','resetcooldown','setcooldown','configcooldown','profile','addtester','stoptester','reset','stats','testerstats','testerlb','maketestticket','set-ticket','changeticket']);
+    const scoped=new Set(['start','leave','forcetest','forcestopqueue','forceresult','migrate','resetcooldown','setcooldown','configcooldown','addtester','stoptester','reset','stats','testerstats','testerlb','maketestticket','set-ticket','changeticket']);
     for(const row of rows){
       if(scoped.has(row.name)){(row.options??=[]).push(option(row.name==='start'));row.options.sort((a,b)=>Number('required'in b&&b.required)-Number('required'in a&&a.required));}
       if(/^(ht3|lt2|ht2|lt1)list$/.test(row.name))for(const sub of row.options??[])if(sub.type===1){(sub.options??=[]).push(option(true));sub.options.sort((a,b)=>Number('required'in b&&b.required)-Number('required'in a&&a.required));}

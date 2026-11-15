@@ -4,7 +4,7 @@ import {ModeScope,modeConfig} from '../modes.js';
 import {ContextStore,SharedDeployment} from '../storage/deployment.js';
 import {UserError} from '../domain/types.js';
 
-const explicit=new Set(['start','leave','forcetest','forcestopqueue','forceresult','migrate','resetcooldown','setcooldown','configcooldown','profile','addtester','stoptester','reset','stats','testerstats','testerlb','maketestticket']);
+const explicit=new Set(['start','leave','forcetest','forcestopqueue','forceresult','migrate','resetcooldown','setcooldown','configcooldown','addtester','stoptester','reset','stats','testerstats','testerlb','maketestticket']);
 function component(value:unknown,key:string):unknown{
   if(Array.isArray(value))return value.map(v=>component(v,key));
   if(!value||typeof value!=='object')return value;

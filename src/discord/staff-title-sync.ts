@@ -10,7 +10,7 @@ export class StaffTitleSync {
     const task=this.apply(member).finally(()=>this.active.delete(member.id));this.active.set(member.id,task);return task;
   }
   private async apply(member:GuildMember){
-    const c=this.config(),staffId=c.permissionGroups.staff[0],highId=c.permissionGroups.highStaff[0];
+    const c=this.config(),staffId=c.permissionGroups.staff[0],highId=c.permissionGroups.highStaff[0],ticketSupportId=c.staffTitles.ticketSupportRoleId;
     if(!staffId||!highId||(!c.staffTitles.staffRoleIds.length&&!c.staffTitles.highStaffRoleIds.length))return;
     const high=c.staffTitles.highStaffRoleIds.some(id=>member.roles.cache.has(id));
     const staffByTitle=c.staffTitles.staffRoleIds.some(id=>member.roles.cache.has(id));
@@ -21,5 +21,9 @@ export class StaffTitleSync {
     const staff=high||staffByTitle||(member.roles.cache.has(highId)&&!grants.highStaff);
     if(staff&&!member.roles.cache.has(staffId)){await member.roles.add(staffId,'Staff title access');grants.staff=true;await save();}
     if(!staff&&grants.staff&&member.roles.cache.has(staffId)){await member.roles.remove(staffId,'Staff title removed');grants.staff=false;await save();}
+    if(ticketSupportId){
+      if(staffByTitle&&!member.roles.cache.has(ticketSupportId)){await member.roles.add(ticketSupportId,'Ticket Support title access');grants.ticketSupport=true;await save();}
+      if(!staffByTitle&&grants.ticketSupport&&member.roles.cache.has(ticketSupportId)){await member.roles.remove(ticketSupportId,'Ticket Support title removed');grants.ticketSupport=false;await save();}
+    }
   }
 }

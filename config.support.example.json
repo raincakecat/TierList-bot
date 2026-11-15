@@ -35,6 +35,8 @@
     "listAdmin": [],
     "restrictionKey": [],
     "highStaff": [],
+    "managerPlus": [],
+    "ticketSupport": [],
     "trainee": [],
     "partnershipManager": [],
     "loaAdmin": [],
@@ -122,7 +124,7 @@
         "staff"
       ],
       "openingPingGroups": [
-        "staff"
+        "ticketSupport"
       ],
       "closingGroups": [
         "staff"
@@ -155,13 +157,13 @@
       "categoryId": null,
       "archiveChannelId": null,
       "accessGroups": [
-        "highStaff"
+        "managerPlus"
       ],
       "openingPingGroups": [
-        "highStaff"
+        "managerPlus"
       ],
       "closingGroups": [
-        "highStaff"
+        "managerPlus"
       ],
       "copyImages": true,
       "openingMessage": "Welcome {userMention}! Please describe the staff report and provide relevant evidence."
@@ -244,7 +246,7 @@
   },
   "ticketNotifications": {
     "highTestingRoleIds": [],
-    "supportRoleIds": []
+    "supportRoleIds": null
   },
   "modeForum": {
     "enabled": false,
@@ -256,8 +258,10 @@
   "testerUmbrellaRoleIds": [],
   "staffTitles": {
     "staffRoleIds": [],
-    "highStaffRoleIds": []
+    "highStaffRoleIds": [],
+    "ticketSupportRoleId": null
   },
+  "roleSync": null,
   "supportRequestsEnabled": true,
   "supportRedirectUrl": null,
   "supportTargetGuildId": null,

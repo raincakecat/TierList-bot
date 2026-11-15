@@ -2,7 +2,7 @@ export const REGIONS = ['NA', 'EU', 'AS'] as const;
 export type Region = typeof REGIONS[number];
 export const TIERS = ['Unranked','LT5','HT5','LT4','HT4','LT3','HT3','LT2','HT2','LT1','HT1'] as const;
 export type Tier = typeof TIERS[number];
-export const GROUPS = ['owner','botAdmin','staff','verifiedTester','regulator','listAdmin','restrictionKey','highStaff','trainee','partnershipManager','loaAdmin','cdResetter'] as const;
+export const GROUPS = ['owner','botAdmin','staff','verifiedTester','regulator','listAdmin','restrictionKey','highStaff','managerPlus','ticketSupport','trainee','partnershipManager','loaAdmin','cdResetter'] as const;
 export type Group = typeof GROUPS[number];
 export type Actor = { id: string; roles: string[]; administrator: boolean; channelAccess?: boolean };
 export interface Player {
@@ -74,7 +74,8 @@ export interface State {
   lastAutomaticBackupAt?: number;
   leaves?:Record<string,Leave>;
   activityNotices?:Record<string,ActivityNotice>;
-  staffTitleGrants?:Record<string,{staff?:boolean;highStaff?:boolean}>;
+  staffTitleGrants?:Record<string,{staff?:boolean;highStaff?:boolean;ticketSupport?:boolean}>;
+  roleSyncGrants?:Record<string,string[]>;
   lastJobCompactionAt?:number;
   legacyStatistics?:{sourceHash:string;appliedAt:number;testers:Record<string,{allTimeCount:number;undatedPeriodCount:number}>};
 }
