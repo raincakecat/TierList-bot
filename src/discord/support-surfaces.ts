@@ -19,7 +19,7 @@ export function supportGuideEmbed(config:Config,panelChannelId:string,logoUrl?:s
   const embed=new EmbedBuilder()
     .setColor(config.branding.colors.panel as `#${string}`)
     .setTitle('Lunar Support')
-    .setDescription(`Need help? Open a ticket in <#${panelChannelId}> and choose the option that fits.`)
+    .setDescription(`Need help? Open a ticket in <#${panelChannelId}>.`)
     .addFields(
       {name:'01  ·  General Support',value:'Questions or issues with the server.',inline:false},
       {name:'02  ·  Player Report',value:'Report a player. Include their name and any proof you have.',inline:false},
