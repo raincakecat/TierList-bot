@@ -79,6 +79,7 @@
     "verificationPanel": null,
     "supportPanel": null,
     "results": null,
+    "migrations": null,
     "testerAlerts": null,
     "testingArchives": null,
     "quotaReports": null,

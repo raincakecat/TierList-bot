@@ -7,7 +7,7 @@ This package contains a configurable Discord bot for account linking, regional t
 
 The full-package ZIP includes compiled JavaScript, TypeScript source, automated tests, pinned dependencies, configuration templates, SQL setup, launchers, and this guide. Node.js and downloaded dependencies are not bundled. Internet access is needed for installation and normal operation.
 
-Release status: 221 automated tests pass locally. The consolidated testing and support configuration is deployed privately. This public package contains source and generic examples; validate permissions, hosting, database, and recovery in your own server. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
+Release status: 223 automated tests pass locally. The consolidated testing and support configuration is deployed privately. This public package contains source and generic examples; validate permissions, hosting, database, and recovery in your own server. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
 
 Read the quick start for the shortest installation route. The later sections explain configuration, permissions, hosting, recovery, migration, and troubleshooting. Commands shown in this guide must be entered in the specified place: host terminal commands on the machine running the bot, and slash commands inside your Discord server.
 
@@ -581,3 +581,5 @@ In the support server, General Support is visible to Staff. Player Reports are h
 Set supportRequestsEnabled to false and supportRedirectUrl to the support-server invite in the main server after the new panel is ready. This replaces new support requests with a link; it does not close existing tickets. Set supportTargetGuildId in the support configuration to the main server ID for cross-server /profile and /unrestrict. New support transcripts stay in the support server's private archive channels and host archive directory. Old transcripts remain with the server where each ticket opened.
 
 Owner controls setcooldown, configcooldown, and allcdreset. Owner or CD Resetter can clear one player's cooldown with resetcooldown. Bot Admin can manage testers and local verification without changing cooldown policy. All bulk actions remain scoped to the server where the command runs. Before a live cutover, save a database backup and Discord layout snapshot, archive old testing tickets, rehearse the new panel and permissions, and check the nine forum posts and results channel.
+
+Map channels.migrations in the main server to a public, read-only #migrations channel. Regulator and above can use /migrate in the support server with a required mode, tier, region, and source. It updates only that mode in the main server, records the acting staff member, and posts an announcement in #migrations. Normal completed tests still appear in #results with their existing reactions. For unverified players, include ign so the Minecraft username can be checked.

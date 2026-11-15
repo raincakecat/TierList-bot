@@ -1,6 +1,7 @@
 import type {Config} from '../config.js';
 import { SlashCommandBuilder, SlashCommandStringOption } from 'discord.js';
 import { REGIONS, TIERS } from '../domain/types.js';
+import {OTHER_MODES} from '../modes.js';
 const regions=(o:SlashCommandStringOption)=>o.setName('region').setDescription('Region').setRequired(true).addChoices(...REGIONS.map(value=>({name:value,value})));
 const rank=(o:SlashCommandStringOption)=>o.setName('tier').setDescription('Tier').setRequired(true).addChoices(...TIERS.filter(t=>t!=='Unranked').map(value=>({name:value,value})));
 const cmd=(name:string,description:string)=>new SlashCommandBuilder().setName(name).setDescription(description).setContexts(0);
@@ -56,7 +57,11 @@ export function commandDefinitions(config?:Config){
   const rows=commands.map(c=>c.toJSON());
   if(config&&!config.modules.testing){
     const supportCommands=new Set(['health','profile','forceclose','ticketclose','requestclose','deadline','add','remove','rename','uuid','unrestrict','maintenance','setup','config','panels','backup','set-ticket','changeticket']);
-    return rows.filter(row=>supportCommands.has(row.name));
+    if(config.supportTargetGuildId)supportCommands.add('migrate');
+    const selected=rows.filter(row=>supportCommands.has(row.name));
+    const migrate=selected.find(row=>row.name==='migrate');
+    if(migrate){(migrate.options??=[]).push(new SlashCommandStringOption().setName('mode').setDescription('Game mode in the testing server').setRequired(true).addChoices({name:'Crystal',value:'crystal'},...OTHER_MODES.map(([value,name])=>({name,value}))).toJSON());migrate.options.sort((a,b)=>Number('required'in b&&b.required)-Number('required'in a&&a.required));}
+    return selected;
   }
   if(config&&config.gameModes.length>1){
     const option=(required:boolean)=>new SlashCommandStringOption().setName('mode').setDescription('Game mode').setRequired(required).addChoices(...config.gameModes.map(m=>({name:m.name,value:m.key}))).toJSON();

@@ -99,11 +99,13 @@ export class Gateway {
     const id=t?.opener??String(j.data.playerId),p=s.players[id]!;const guild=await this.guild(),member=await this.member(guild,id);
     const previous=t?.openingTier??j.data.previousTier as Tier,earned=t?.outcome??j.data.earnedTier??p.tier;
     const values=this.values(p,t);values.discordUsername=member?.user.username??p.ign??id;values.earnedRank=tierName(earned as Tier);values.previousRank=tierName(previous??'Unranked');
-    const mode=t?.modeName??this.config.activeMode?.name;const embed=new EmbedBuilder().setTitle((mode?`${mode} | `:'')+render(this.config.templates.resultTitle,values)).setColor(this.config.branding.colors.result as `#${string}`).addFields({name:'Tester',value:t?.tester?`<@${t.tester}>`:`<@${String(j.data.actor)}>`},{name:'Region',value:String(t?.region??j.data.region??p.region??'N/A')},{name:'Username',value:t?.openingIgn??String(j.data.ign??p.ign??'N/A')},{name:'Previous Rank',value:values.previousRank!},{name:'Rank Earned',value:values.earnedRank!});
+    const migration=j.data.migration===true,mode=t?.modeName??this.config.activeMode?.name;const embed=new EmbedBuilder().setTitle(migration?`${mode??'Crystal'} | Rank Migration`:(mode?`${mode} | `:'')+render(this.config.templates.resultTitle,values)).setColor(this.config.branding.colors.result as `#${string}`).addFields({name:migration?'Recorded by':'Tester',value:t?.tester?`<@${t.tester}>`:`<@${String(j.data.actor)}>`},{name:'Region',value:String(t?.region??j.data.region??p.region??'N/A')},{name:'Username',value:t?.openingIgn??String(j.data.ign??p.ign??'N/A')},{name:'Previous Rank',value:values.previousRank!},{name:'Rank Earned',value:values.earnedRank!});
     if(mode)embed.addFields({name:'Game mode',value:mode});
+    if(migration)embed.addFields({name:'Source',value:String(j.data.source??'Unknown').slice(0,1024)});
     if(t?.openingUuid??p.uuid)embed.setThumbnail(`https://visage.surgeplay.com/bust/128/${t?.openingUuid??p.uuid}`);
-    const message=await this.sendOnce(await this.text(this.config.channels.results!),j,{content:render(this.config.templates.resultAboveEmbed,values),embeds:[embed],allowedMentions:{users:[id],parse:[]}},save);
-    for(const emoji of ['👑','🥳','😱','😭','😂','💀'])await message.react(emoji);
+    const channelId=migration?this.config.channels.migrations??this.config.channels.results:this.config.channels.results;
+    const message=await this.sendOnce(await this.text(channelId!),j,{content:migration?`<@${id}> · rank migrated`:render(this.config.templates.resultAboveEmbed,values),embeds:[embed],allowedMentions:{users:[id],parse:[]}},save);
+    if(!migration)for(const emoji of ['👑','🥳','😱','😭','😂','💀'])await message.react(emoji);
   }
   private async notice(j:Job,t:Ticket|undefined,save:(k:string,v:unknown)=>Promise<void>){
     if(j.data.event==='high-test-purge'){

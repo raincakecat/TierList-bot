@@ -32,7 +32,7 @@ export const configSchema = z.object({
   restriction:z.object({roleId:id}).strict().default({roleId:null}),
   regions:z.object({NA:regionSchema,EU:regionSchema,AS:regionSchema}).strict(),
   tierRoleIds:z.object({LT5:id,HT5:id,LT4:id,HT4:id,LT3:id,HT3:id,LT2:id,HT2:id,LT1:id,HT1:id.default(null)}).strict(),
-  channels:z.object({verificationPanel:id,supportPanel:id,results:id,testerAlerts:id,testingArchives:id,quotaReports:id,staffActionLog:id,operationalLog:id,botReview:id,requestLoa:id.default(null),loaInProgress:id.default(null),acceptedLoa:id.default(null)}).strict(),
+  channels:z.object({verificationPanel:id,supportPanel:id,results:id,migrations:id.default(null),testerAlerts:id,testingArchives:id,quotaReports:id,staffActionLog:id,operationalLog:id,botReview:id,requestLoa:id.default(null),loaInProgress:id.default(null),acceptedLoa:id.default(null)}).strict(),
   categories:z.object({highTests:id,overflow:ids}).strict(),
   testing:z.object({queueCapacityPerRegion:z.number().int().positive().max(1000),normalCooldown:duration,highCooldown:duration,monthlyTesterQuota:z.number().int().positive().nullable(),defaultLeaderboardPeriod:z.literal('monthly'),weeklyStartDay:z.literal('Sunday')}).strict(),
   tierLists:z.object({channelIds:z.object({HT3:id,LT2:id,HT2:id,LT1:id,HT1:id.default(null)}).strict()}).strict(),

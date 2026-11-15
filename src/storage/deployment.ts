@@ -1,6 +1,9 @@
-import {clearLists,syncLists} from '../domain/service.js';
+import {Service,clearLists,syncLists} from '../domain/service.js';
+import {requireGroup} from '../domain/permissions.js';
+import {modeConfig} from '../modes.js';
+import type {ConfigFile} from '../config.js';
 import {randomUUID} from 'node:crypto';
-import {emptyState,UserError,type State,type Player,type ModeState} from '../domain/types.js';
+import {emptyState,UserError,type Actor,type Tier,type State,type Player,type ModeState} from '../domain/types.js';
 import {Store,type Adapter,type Snapshot} from './store.js';
 import type {ModeScope} from '../modes.js';
 
@@ -93,10 +96,23 @@ class ScopedAdapter implements Adapter {
   async close(){}
 }
 export class SharedDeployment {
-  constructor(readonly parent:Store){}
+  constructor(readonly parent:Store,readonly configs:ConfigFile[]=[] ){}
   async attach(guild:string,mode:string){await this.parent.change(root=>{if(guild!==root.guildId&&!root.servers?.[guild])(root.servers??={})[guild]={...emptyState(guild),maintenance:true};const s=rawGuild(root,guild);s.defaultModeId??=mode;validateIdentities(root);});}
   guildStore(guild:string){return new Store(new ScopedAdapter(this.parent,guild),this.parent.operations);}
   async supportProfile(guild:string,id:string){const root=await this.parent.read(false),source=guildSnapshot(root,guild);return source.players[id]??null;}
+  async migrateFromSupport(targetGuild:string,supportGuild:string,actor:Actor,id:string,mode:string,tier:Tier,region:string,ign:string|undefined,source:string){
+    const target=this.configs.find(f=>f.value.community.guildId===targetGuild)?.value;
+    const support=this.configs.find(f=>f.value.community.guildId===supportGuild)?.value;
+    if(!target||!support||support.supportTargetGuildId!==targetGuild||targetGuild===supportGuild)throw new UserError('The testing server is not configured for support migrations.');
+    requireGroup(support,actor,'regulator');
+    if(!target.gameModes.some(m=>m.key===mode))throw new UserError('Choose a game mode in the testing server.');
+    if(!source.trim()||source.length>100)throw new UserError('Provide a source up to 100 characters.');
+    const config=modeConfig(target,mode),grant=config.permissionGroups.regulator[0]??config.permissionGroups.owner[0];
+    if(!grant)throw new UserError('The testing server needs a Regulator role mapping.');
+    const profile=await this.supportProfile(targetGuild,id);
+    if(!profile?.uuid&&!ign)throw new UserError('Provide an IGN for this unverified player.');
+    await new Service(this.modeStore(targetGuild,mode,config.activeMode?.name),()=>config).forceResult({id:actor.id,roles:[grant],administrator:false},id,tier,region,ign,source);
+  }
   async unrestrictFromSupport(sourceGuild:string,supportGuild:string,actor:string,id:string){
     if(sourceGuild===supportGuild)throw new UserError('Support and testing servers must be separate.');
     return this.parent.change(root=>{

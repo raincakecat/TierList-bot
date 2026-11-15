@@ -116,6 +116,7 @@ Staff Reports and Restriction Appeals: High Staff only for live and archive acce
 Partnership Requests: Partnership Manager handles live tickets; Partnership Manager and Regulator+ view the archive.
 /profile reads the main server's shared player profile when used in Support.
 /unrestrict in Support: High Staff or Restriction Key; records the action in both servers.
+/migrate member tier region source mode [ign] in Support: Regulator and above. Updates the selected mode in the main server; announcements go to #migrations there. IGN is required for an unverified player.
 New support requests use Support's panel. Old open tickets remain in their original server until closed.
 /backup export/restore: Owner, all current-server modes; restore rejects cross-server identity conflicts.
 /backup transfer: Owner, entire deployment, maintenance required in every server.

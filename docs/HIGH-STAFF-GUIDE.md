@@ -4,7 +4,7 @@ Use this for sensitive tickets and advanced bot operations. Each section names t
 
 ## Reports, appeals and sensitive support — High Staff
 
-High Staff handles **player reports, staff reports and restriction appeals**. General support belongs to Staff; partnerships belong to Partnership Managers. Owners can handle every type.
+Regulator and above handle live **player reports**; their archives are High Staff only. High Staff handles **staff reports and restriction appeals**. General support belongs to Staff; partnerships belong to Partnership Managers. Owners can handle every type.
 
 Use `/add`, `/remove` and `/rename` when managing access and routing. `/changeticket type:staff-report` moves an existing registered ticket to the appropriate support route and updates its access.
 
@@ -18,7 +18,7 @@ Keep sensitive evidence in its ticket and type-specific archive. Do not move a s
 
 `/forcestopqueue region:NA mode:Sword` — Stop sessions and clear that mode's regional queue when it must close.
 
-`/forceresult member:@player tier:HT3 region:NA mode:Sword` — Assign a reviewed result outside an active test. `/migrate member:@player tier:HT3 region:NA source:Community mode:Sword` records a migrated rank. An unverified player needs `ign`. Check the mode, region, previous rank and supporting evidence first; finish any existing test in that mode before forcing a result.
+`/forceresult member:@player tier:HT3 region:NA mode:Sword` — Assign a reviewed result outside an active test. In Lunar Support, Regulator and above can use `/migrate member:@player tier:HT3 region:NA source:Community mode:Sword` to record a migrated rank in the main server. It posts in the main server's #migrations channel. An unverified player needs `ign`. Check the mode, region, previous rank and supporting evidence first; finish any existing test in that mode before forcing a result.
 
 `/deadline set duration:3h` — Add or replace a deadline in the current ticket. Durations are **1m–14d**. `/deadline clear` removes it. Expiry pings the setter for review; it does not close the ticket.
 
@@ -34,15 +34,15 @@ The forum is generated from these mode records. Don't maintain a second manual l
 
 ## Tester access and player accounts — Bot Admin
 
-`/addtester member:@person mode:Sword` — Assign Staff and that mode's Tester role. `/stoptester member:@person mode:Sword` removes that mode's tester authorization and stops its active session; it does not remove Staff.
+`/addtester member:@person mode:Sword` — Assign Staff, Verified Tester and that mode's Tester role. `/stoptester member:@person mode:Sword` removes that mode's tester authorization and stops its active session; it does not remove Staff.
 
 `/unverify member:@player scope:server` — Unlink the current server's account association so the player can verify again with a corrected account, region or preferred server. Ranks/cooldowns remain. The other server's verification is preserved, and open tests must finish before unlinking.
 
 The Minecraft identity is shared across servers. Changing that shared account requires **Owner-confirmed** `/unverify scope:global`; it clears verification in both servers and is blocked while either has an open test. Do not work around identity conflicts by assigning a UUID to another Discord account.
 
-`/resetcooldown member:@player mode:Sword` — Individual reset; CD Resetters can use this too.
+`/resetcooldown member:@player mode:Sword` — Individual reset for Owner or CD Resetter.
 
-`/setcooldown member:@player days:4 mode:Sword` — Set the saved cooldown directly. `/configcooldown kind:normal duration:4d mode:Sword` changes the duration for future completed tests; use `high` for high tests and `0` for no cooldown.
+**Owner only:** `/setcooldown member:@player days:4 mode:Sword` sets the saved cooldown directly. `/configcooldown kind:normal duration:4d mode:Sword` changes the duration for future completed tests; use `high` for high tests and `0` for no cooldown.
 
 `/configquota count:...` sets the server's monthly quota; `0` disables it. It does not change completed-test counts.
 

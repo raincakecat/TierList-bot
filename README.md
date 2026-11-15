@@ -6,7 +6,7 @@ Version 0.2.0 adds staff Leave of Absence requests, approval controls, timed rol
 
 **Full package:** [Download the ZIP with compiled files and PDF setup guide](full-package/full-package.zip), or [read the PDF guide](docs/Full-Setup-Guide.pdf).
 
-**Status:** 221 automated tests pass locally. The consolidated Crystal testing and Lunar Support configuration is deployed on the private VM. This public package contains examples and source code only; supply your own IDs and credentials. See `docs/STATUS.md`.
+**Status:** 223 automated tests pass locally. The consolidated Crystal testing and Lunar Support configuration is deployed on the private VM. This public package contains examples and source code only; supply your own IDs and credentials. See `docs/STATUS.md`.
 
 ## Install the ready-to-run ZIP
 
@@ -131,6 +131,8 @@ Missing permission roles now block only the request flows that need them; unrela
 The candidate supports a shared bot/database with isolated community and mode records. See [multi-server setup](docs/MULTI-SERVER.md) and `config.multimode.example.json`. Keep the new community in maintenance until live rehearsal passes.
 
 For the consolidated layout, start from `config.consolidated.example.json`. The main server hosts Crystal, Sword, Axe, SMP, Pot, Mace, UHC, Nethpot, and Spear Mace. Each mode has NA, EU, and AS/AU waitlist channels under three regional queue categories. One High Testing Lists forum holds a post per mode, and all modes share one results channel. The support server handles General Support, Player Reports, Staff Reports, Restriction Appeals, and Partnership Requests. Existing tickets in an old server can finish there while new requests use the support server.
+
+Set `channels.migrations` in the main server to a public, read-only `#migrations` channel. `/migrate` is available to Regulator and above in Lunar Support; it requires the target mode, tier, region, and source. The rank changes in the main server and its announcement goes to `#migrations`. Normal testing results continue in `#results`.
 
 Set `BOT_CONFIGS` to the main config, any retiring server config, and the support config in that order. Use the same database settings in all files. Set `supportRequestsEnabled: false` and `supportRedirectUrl` in a retiring server to replace its support panel with a link. Set `supportTargetGuildId` in the support config so authorized support staff can inspect the main server profile and remove a restriction. Never commit live config files, `.env`, database files, transcripts, or deployment IDs.
 

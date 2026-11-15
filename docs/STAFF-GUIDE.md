@@ -6,7 +6,9 @@ Use this for ticket handling, common player problems and leave requests. Command
 
 **Staff:** general support and testing tickets.
 
-**High Staff:** player reports, staff reports and restriction appeals.
+**Regulator and above:** live player reports. Their archives are High Staff only.
+
+**High Staff:** staff reports and restriction appeals.
 
 **Partnership Manager:** partnership requests.
 
@@ -58,7 +60,7 @@ Approved leave exempts overlapping monthly quota periods. It does not stop you t
 
 ## Extra roles and escalation
 
-**CD Resetter or Bot Admin:** `/resetcooldown member:@player mode:Sword` clears one mode cooldown. Staff alone cannot reset it.
+**CD Resetter or Owner:** `/resetcooldown member:@player mode:Sword` clears one mode cooldown. Staff and Bot Admin alone cannot reset it.
 
 **Restriction Moderator:** `/restrict member:@player ign:Name reason:... duration:7d` and `/unrestrict member:@player`. Restrictions affect every mode in this server. Review list membership afterward; HT3 membership is manual.
 

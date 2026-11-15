@@ -1,6 +1,6 @@
 ## Consolidated deployment - 2026-11-15
 
-221 automated tests pass locally. The private deployment now runs nine testing modes in the main server and five support ticket types in a separate support server through one database. The Project Lunar testing partitions were transferred after its final open test was archived. Existing support tickets in the older servers remain there until they close. The nine high-list forum posts, 27 waitlist panels, one results mapping, support panel, role hierarchy, and channel access were checked live. The old Crystal high-list messages were backed up before their channels were retired. Public examples contain no live IDs or member data.
+223 automated tests pass locally. The private deployment now runs nine testing modes in the main server and five support ticket types in a separate support server through one database. The Project Lunar testing partitions were transferred after its final open test was archived. Existing support tickets in the older servers remain there until they close. The nine high-list forum posts, 27 waitlist panels, one results mapping, support panel, role hierarchy, and channel access were checked live. The old Crystal high-list messages were backed up before their channels were retired. Public examples contain no live IDs or member data.
 
 ## Multi-mode candidate - 2026-11-03
 
