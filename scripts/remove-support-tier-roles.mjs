@@ -1,0 +1,63 @@
+import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
+import {DatabaseSync} from 'node:sqlite';
+import {REST,Routes} from 'discord.js';
+
+const apply=process.argv.includes('--apply');
+const main=JSON.parse(await readFile(process.env.MAIN_CONFIG??'data/configs/crystal-consolidated.json','utf8'));
+const supportPath=process.env.SUPPORT_CONFIG??'data/configs/lunar-support.json';
+const support=JSON.parse(await readFile(supportPath,'utf8'));
+const guild=support.community.guildId,rootGuild=main.community.guildId;
+if(!guild||!rootGuild||guild===rootGuild||support.modules.testing||!process.env.DISCORD_TOKEN)throw Error('Expected distinct main/support guilds, disabled support testing, and DISCORD_TOKEN.');
+const sourceTierIds=new Set(main.gameModes.flatMap(mode=>Object.values(mode.tierRoleIds)).filter(Boolean));
+const mappings=support.roleSync?.mappings??[];
+const tierMappings=mappings.filter(x=>sourceTierIds.has(x.sourceRoleId));
+const targetIds=new Set(tierMappings.map(x=>x.targetRoleId));
+const retained=mappings.filter(x=>!sourceTierIds.has(x.sourceRoleId));
+if(targetIds.size!==tierMappings.length||retained.some(x=>targetIds.has(x.targetRoleId)))throw Error('Tier mappings overlap with retained mappings.');
+if(targetIds.size!==90)throw Error(`Expected exactly 90 support tier roles; found ${targetIds.size}.`);
+const otherRefs=[];
+function scan(value,path=''){
+  if(Array.isArray(value))return value.forEach((item,i)=>scan(item,`${path}[${i}]`));
+  if(value&&typeof value==='object')return Object.entries(value).forEach(([key,item])=>{if(key!=='roleSync')scan(item,`${path}.${key}`);});
+  if(targetIds.has(value))otherRefs.push(path);
+}
+scan(support);
+if(otherRefs.length)throw Error(`Tier roles are used elsewhere in support config: ${otherRefs.join(', ')}`);
+const rest=new REST({version:'10'}).setToken(process.env.DISCORD_TOKEN);
+const roles=await rest.get(Routes.guildRoles(guild));
+const byId=new Map(roles.map(x=>[x.id,x]));
+const channels=await rest.get(Routes.guildChannels(guild));
+const overwrites=channels.flatMap(ch=>(ch.permission_overwrites??[]).filter(x=>targetIds.has(x.id)).map(x=>`${ch.name}:${x.id}`));
+if(overwrites.length)throw Error(`Tier roles are used in channel permissions: ${overwrites.join(', ')}`);
+const missing=[...targetIds].filter(id=>!byId.has(id));
+if(missing.length)throw Error(`Missing ${missing.length} mapped support tier roles.`);
+const dbFile=main.database.sqlite.file;
+if(main.database.backend!=='sqlite'||support.database.sqlite.file!==dbFile)throw Error('Expected a shared SQLite database.');
+const db=new DatabaseSync(dbFile);
+const row=db.prepare('SELECT revision,body FROM crystal_state WHERE guild=?').get(rootGuild);
+if(!row)throw Error('Main database state is missing.');
+const root=JSON.parse(row.body),supportState=root.servers?.[guild];
+if(!supportState)throw Error('Support database state is missing.');
+const grants=supportState.roleSyncGrants??{};
+const affected=Object.values(grants).filter(ids=>ids.some(id=>targetIds.has(id))).length;
+console.log(JSON.stringify({guild,tierRoles:targetIds.size,retainedMappings:retained.length,affectedGrantRecords:affected,apply}));
+if(!apply){db.close();process.exit(0);}
+await mkdir('data/support-tier-role-backups',{recursive:true});
+const stamp=new Date().toISOString().replaceAll(':','-');
+const prefix=`data/support-tier-role-backups/${stamp}`;
+db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+await copyFile(dbFile,`${prefix}.sqlite`);
+await copyFile(supportPath,`${prefix}.config.json`);
+await writeFile(`${prefix}.roles.json`,JSON.stringify([...targetIds].map(id=>byId.get(id)),null,2)+'\n',{mode:0o600});
+await writeFile(`${prefix}.grants.json`,JSON.stringify(Object.fromEntries(Object.entries(grants).filter(([,ids])=>ids.some(id=>targetIds.has(id)))),null,2)+'\n',{mode:0o600});
+for(const [id,ids] of Object.entries(grants))grants[id]=ids.filter(role=>!targetIds.has(role));
+const updated=db.prepare('UPDATE crystal_state SET body=?,revision=revision+1 WHERE guild=? AND revision=?').run(JSON.stringify(root),rootGuild,row.revision);
+if(updated.changes!==1)throw Error('Database changed during tier-role cleanup.');
+db.close();
+support.roleSync.mappings=retained;
+await writeFile(supportPath,JSON.stringify(support,null,2)+'\n',{mode:0o600});
+let deleted=0;
+for(const id of targetIds){await rest.delete(Routes.guildRole(guild,id),{reason:'Support server no longer uses tier roles'});deleted++;console.log(`Deleted ${byId.get(id).name} (${deleted}/${targetIds.size})`);}
+const remaining=(await rest.get(Routes.guildRoles(guild))).filter(x=>targetIds.has(x.id));
+if(remaining.length)throw Error(`${remaining.length} tier roles remain in the support server.`);
+console.log(JSON.stringify({deleted,remainingMappings:retained.length,backup:prefix}));
