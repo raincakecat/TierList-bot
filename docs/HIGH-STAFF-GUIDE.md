@@ -40,7 +40,7 @@ The forum is generated from these mode records. Don't maintain a second manual l
 
 The Minecraft identity is shared across servers. Changing that shared account requires **Owner-confirmed** `/unverify scope:global`; it clears verification in both servers and is blocked while either has an open test. Do not work around identity conflicts by assigning a UUID to another Discord account.
 
-`/resetcooldown member:@player mode:Sword` — Individual reset for Owner or CD Resetter.
+`/resetcooldown member:@player mode:Sword` — Clears that player's cooldown in the selected game mode. In the main server, Owner or CD Resetter can use it; in Lunar Support, Regulator and above can use it.
 
 **Owner only:** `/setcooldown member:@player days:4 mode:Sword` sets the saved cooldown directly. `/configcooldown kind:normal duration:4d mode:Sword` changes the duration for future completed tests; use `high` for high tests and `0` for no cooldown.
 

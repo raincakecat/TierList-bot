@@ -117,6 +117,16 @@ export class SharedDeployment {
     if(!profile?.uuid&&!ign)throw new UserError('Provide an IGN for this unverified player.');
     await new Service(this.modeStore(targetGuild,mode,config.activeMode?.name),()=>config).forceResult({id:actor.id,roles:[grant],administrator:false},id,tier,region,ign,source);
   }
+  async resetCooldownFromSupport(targetGuild:string,supportGuild:string,actor:Actor,id:string,mode:string){
+    const target=this.configs.find(f=>f.value.community.guildId===targetGuild)?.value;
+    const support=this.configs.find(f=>f.value.community.guildId===supportGuild)?.value;
+    if(!target||!support||support.supportTargetGuildId!==targetGuild||targetGuild===supportGuild)throw new UserError('The testing server is not configured for support cooldown resets.');
+    requireGroup(support,actor,'regulator');
+    if(!target.gameModes.some(m=>m.key===mode))throw new UserError('Choose a game mode in the testing server.');
+    const config=modeConfig(target,mode),grant=config.permissionGroups.owner[0];
+    if(!grant)throw new UserError('The testing server needs an Owner role mapping.');
+    await new Service(this.modeStore(targetGuild,mode,config.activeMode?.name),()=>config).resetCooldown({id:actor.id,roles:[grant],administrator:false},id);
+  }
   async unrestrictFromSupport(sourceGuild:string,supportGuild:string,actor:string,id:string){
     if(sourceGuild===supportGuild)throw new UserError('Support and testing servers must be separate.');
     return this.parent.change(root=>{

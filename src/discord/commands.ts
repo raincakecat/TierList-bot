@@ -57,10 +57,12 @@ export function commandDefinitions(config?:Config){
   const rows=commands.map(c=>c.toJSON());
   if(config&&!config.modules.testing){
     const supportCommands=new Set(['health','profile','forceclose','ticketclose','requestclose','deadline','add','remove','rename','uuid','unrestrict','maintenance','setup','config','panels','backup','set-ticket','changeticket']);
-    if(config.supportTargetGuildId)supportCommands.add('migrate');
+    if(config.supportTargetGuildId){supportCommands.add('migrate');supportCommands.add('resetcooldown');}
     const selected=rows.filter(row=>supportCommands.has(row.name));
     const migrate=selected.find(row=>row.name==='migrate');
     if(migrate){(migrate.options??=[]).push(new SlashCommandStringOption().setName('mode').setDescription('Game mode in the testing server').setRequired(true).addChoices({name:'Crystal',value:'crystal'},...OTHER_MODES.map(([value,name])=>({name,value}))).toJSON());migrate.options.sort((a,b)=>Number('required'in b&&b.required)-Number('required'in a&&a.required));}
+    const reset=selected.find(row=>row.name==='resetcooldown');
+    if(reset){(reset.options??=[]).push(new SlashCommandStringOption().setName('mode').setDescription('Game mode in the testing server').setRequired(true).addChoices({name:'Crystal',value:'crystal'},...OTHER_MODES.map(([value,name])=>({name,value}))).toJSON());reset.options.sort((a,b)=>Number('required'in b&&b.required)-Number('required'in a&&a.required));}
     return selected;
   }
   if(config&&config.gameModes.length>1){

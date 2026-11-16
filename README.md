@@ -138,6 +138,8 @@ The main server uses rank-colored trophy role icons for HT1, LT1, HT2, LT2, HT3,
 
 Set `channels.migrations` in the main server to a public, read-only `#migrations` channel. `/migrate` is available to Regulator and above in Lunar Support; it requires the target mode, tier, region, and source. The rank changes in the main server and its announcement goes to `#migrations`. Normal testing results continue in `#results`.
 
+In Lunar Support, Regulator and above can use `/resetcooldown member:@player mode:Sword` to clear that player's cooldown in one main-server game mode. Other modes retain their cooldowns.
+
 Set `BOT_CONFIGS` to the main config, any retiring server config, and the support config in that order. Use the same database settings in all files. Set `supportRequestsEnabled: false` and `supportRedirectUrl` in a retiring server to replace its support panel with a link. Set `supportTargetGuildId` in the support config so authorized support staff can inspect the main server profile and remove a restriction. Never commit live config files, `.env`, database files, transcripts, or deployment IDs.
 
 Queue opening requires Staff, Verified Tester, and the selected mode's Tester role. Staff can handle an assigned ticket without that mode role. Title roles can grant the shared Staff or High Staff role automatically through `staffTitles`; High Staff includes Overseer and above, while Partnership Manager is Staff but below Regulator. Support ticket visibility is set by each channel's permission overwrites; assigning a title alone does not bypass private channel rules.

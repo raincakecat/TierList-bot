@@ -32,6 +32,20 @@ test('support Regulator can migrate one selected mode and Partnership Manager ca
   const command=commandDefinitions(support.value).find(c=>c.name==='migrate');assert(command);assert(command.options?.some(o=>o.name==='mode'&&o.required));
 });
 
+test('support Regulator resets only the selected main-server mode cooldown',async()=>{
+  const main=await ConfigFile.load('config.consolidated.example.json'),support=await ConfigFile.load('config.support.example.json');
+  main.value.community.guildId=MAIN;main.value.permissionGroups.owner=['100000000000000011'];
+  support.value.community.guildId=SUPPORT;support.value.supportTargetGuildId=MAIN;support.value.permissionGroups.regulator=['100000000000000012'];support.value.permissionGroups.partnershipManager=['100000000000000013'];
+  const root=emptyState(MAIN),other=emptyState(SUPPORT);root.initialized=other.initialized=true;root.defaultModeId='crystal';root.players[USER]=player('HT3');root.modes={sword:{players:{[USER]:player('LT3')},queues:{NA:[],EU:[],AS:[]},lists:{}}};root.servers={[SUPPORT]:other};
+  const store=new Store(new MemoryAdapter(root)),deployment=new SharedDeployment(store,[main,support]);
+  const actor={id:'100000000000000014',roles:['100000000000000012'],administrator:false};
+  await deployment.resetCooldownFromSupport(MAIN,SUPPORT,actor,USER,'sword');
+  const result=await store.read(false);assert.equal(result.modes!.sword!.players[USER]!.cooldownUntil,0);assert.equal(result.players[USER]!.cooldownUntil,44);assert.equal(result.servers![SUPPORT]!.players[USER],undefined);assert.equal(result.audit.at(-1)?.actor,actor.id);
+  await assert.rejects(deployment.resetCooldownFromSupport(MAIN,SUPPORT,{...actor,roles:['100000000000000013']},USER,'crystal'),/permission/);
+  await assert.rejects(deployment.resetCooldownFromSupport(MAIN,SUPPORT,actor,USER,'unknown'),/game mode/);
+  const command=commandDefinitions(support.value).find(c=>c.name==='resetcooldown');assert(command?.options?.some(o=>o.name==='mode'&&o.required));
+});
+
 test('profiles in either server list every configured game mode',async()=>{
  const main=await ConfigFile.load('config.consolidated.example.json'),support=await ConfigFile.load('config.support.example.json');main.value.community.guildId=MAIN;support.value.community.guildId=SUPPORT;
  const root=emptyState(MAIN);root.defaultModeId='crystal';root.players[USER]=player('HT3');root.modes={sword:{players:{[USER]:player('LT2')},queues:{NA:[],EU:[],AS:[]},lists:{}}};
