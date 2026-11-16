@@ -1,4 +1,4 @@
-import type {GuildMember} from 'discord.js';
+import {Routes,type Guild,type GuildMember} from 'discord.js';
 import type {Config} from '../config.js';
 import type {Store} from '../storage/store.js';
 
@@ -8,6 +8,27 @@ export class StaffTitleSync {
   sync(member:GuildMember):Promise<void>{
     const running=this.active.get(member.id);if(running)return running;
     const task=this.apply(member).finally(()=>this.active.delete(member.id));this.active.set(member.id,task);return task;
+  }
+  async reconcile(guild:Guild):Promise<void>{
+    const c=this.config(),staffId=c.permissionGroups.staff[0],highId=c.permissionGroups.highStaff[0],ticketSupportId=c.staffTitles.ticketSupportRoleId;
+    const grants=new Set(Object.keys((await this.store.read(false)).staffTitleGrants??{}));
+    const candidateIds:string[]=[];
+    let after='0';
+    while(true){
+      const batch=await guild.client.rest.get(Routes.guildMembers(guild.id),{query:new URLSearchParams({limit:'1000',after})}) as {user?:{id:string;bot?:boolean};roles:string[]}[];
+      for(const member of batch){
+        if(!member.user||member.user.bot)continue;
+        const staffTitle=c.staffTitles.staffRoleIds.some(id=>member.roles.includes(id));
+        const highTitle=c.staffTitles.highStaffRoleIds.some(id=>member.roles.includes(id));
+        if(grants.has(member.user.id)||(highTitle&&highId&&!member.roles.includes(highId))||((staffTitle||highTitle)&&staffId&&!member.roles.includes(staffId))||(staffTitle&&ticketSupportId&&!member.roles.includes(ticketSupportId)))candidateIds.push(member.user.id);
+      }
+      if(batch.length<1000)break;
+      after=batch.at(-1)?.user?.id??'';if(!after)throw Error('Discord returned a member page without a cursor.');
+    }
+    let index=0;
+    const failures:string[]=[];
+    await Promise.all(Array.from({length:Math.min(4,candidateIds.length)},async()=>{while(index<candidateIds.length){const id=candidateIds[index++]!;try{await this.sync(await guild.members.fetch({user:id,force:true}));}catch(error){failures.push(id);console.error(`Staff title sync failed for ${id}:`,error);}}}));
+    if(failures.length)throw Error(`Staff title reconciliation failed for ${failures.length} member(s).`);
   }
   private async apply(member:GuildMember){
     const c=this.config(),staffId=c.permissionGroups.staff[0],highId=c.permissionGroups.highStaff[0],ticketSupportId=c.staffTitles.ticketSupportRoleId;
