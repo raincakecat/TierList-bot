@@ -74,7 +74,7 @@ export interface State {
   lastAutomaticBackupAt?: number;
   leaves?:Record<string,Leave>;
   activityNotices?:Record<string,ActivityNotice>;
-  staffTitleGrants?:Record<string,{staff?:boolean;highStaff?:boolean;ticketSupport?:boolean}>;
+  staffTitleGrants?:Record<string,{staff?:boolean;highStaff?:boolean;ticketSupport?:boolean;cdResetter?:boolean}>;
   roleSyncGrants?:Record<string,string[]>;
   lastJobCompactionAt?:number;
   legacyStatistics?:{sourceHash:string;appliedAt:number;testers:Record<string,{allTimeCount:number;undatedPeriodCount:number}>};

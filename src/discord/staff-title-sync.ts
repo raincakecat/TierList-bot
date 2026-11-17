@@ -10,7 +10,8 @@ export class StaffTitleSync {
     const task=this.apply(member).finally(()=>this.active.delete(member.id));this.active.set(member.id,task);return task;
   }
   async reconcile(guild:Guild):Promise<void>{
-    const c=this.config(),staffId=c.permissionGroups.staff[0],highId=c.permissionGroups.highStaff[0],ticketSupportId=c.staffTitles.ticketSupportRoleId;
+    const c=this.config(),staffId=c.permissionGroups.staff[0],highId=c.permissionGroups.highStaff[0],ticketSupportId=c.staffTitles.ticketSupportRoleId,cdId=c.permissionGroups.cdResetter[0];
+    const seniorIds=this.cooldownSourceRoleIds(guild);
     const grants=new Set(Object.keys((await this.store.read(false)).staffTitleGrants??{}));
     const candidateIds:string[]=[];
     let after='0';
@@ -20,7 +21,7 @@ export class StaffTitleSync {
         if(!member.user||member.user.bot)continue;
         const staffTitle=c.staffTitles.staffRoleIds.some(id=>member.roles.includes(id));
         const highTitle=c.staffTitles.highStaffRoleIds.some(id=>member.roles.includes(id));
-        if(grants.has(member.user.id)||(highTitle&&highId&&!member.roles.includes(highId))||((staffTitle||highTitle)&&staffId&&!member.roles.includes(staffId))||(staffTitle&&ticketSupportId&&!member.roles.includes(ticketSupportId)))candidateIds.push(member.user.id);
+        if(grants.has(member.user.id)||(highTitle&&highId&&!member.roles.includes(highId))||((staffTitle||highTitle)&&staffId&&!member.roles.includes(staffId))||(staffTitle&&ticketSupportId&&!member.roles.includes(ticketSupportId))||(cdId&&seniorIds.some(id=>member.roles.includes(id))&&!member.roles.includes(cdId)))candidateIds.push(member.user.id);
       }
       if(batch.length<1000)break;
       after=batch.at(-1)?.user?.id??'';if(!after)throw Error('Discord returned a member page without a cursor.');
@@ -31,7 +32,7 @@ export class StaffTitleSync {
     if(failures.length)throw Error(`Staff title reconciliation failed for ${failures.length} member(s).`);
   }
   private async apply(member:GuildMember){
-    const c=this.config(),staffId=c.permissionGroups.staff[0],highId=c.permissionGroups.highStaff[0],ticketSupportId=c.staffTitles.ticketSupportRoleId;
+    const c=this.config(),staffId=c.permissionGroups.staff[0],highId=c.permissionGroups.highStaff[0],ticketSupportId=c.staffTitles.ticketSupportRoleId,cdId=c.permissionGroups.cdResetter[0];
     if(!staffId||!highId||(!c.staffTitles.staffRoleIds.length&&!c.staffTitles.highStaffRoleIds.length))return;
     const high=c.staffTitles.highStaffRoleIds.some(id=>member.roles.cache.has(id));
     const staffByTitle=c.staffTitles.staffRoleIds.some(id=>member.roles.cache.has(id));
@@ -46,5 +47,17 @@ export class StaffTitleSync {
       if(staffByTitle&&!member.roles.cache.has(ticketSupportId)){await member.roles.add(ticketSupportId,'Ticket Support title access');grants.ticketSupport=true;await save();}
       if(!staffByTitle&&grants.ticketSupport&&member.roles.cache.has(ticketSupportId)){await member.roles.remove(ticketSupportId,'Ticket Support title removed');grants.ticketSupport=false;await save();}
     }
+    if(cdId){
+      const senior=this.cooldownSourceRoleIds(member.guild).some(id=>member.roles.cache.has(id));
+      if(senior&&!member.roles.cache.has(cdId)){await member.roles.add(cdId,'Regulator or higher cooldown access');grants.cdResetter=true;await save();}
+      if(!senior&&grants.cdResetter&&member.roles.cache.has(cdId)){await member.roles.remove(cdId,'Regulator or higher role removed');grants.cdResetter=false;await save();}
+    }
+  }
+  cooldownSourceRoleIds(guild:Guild):string[]{
+    const c=this.config(),regulator=c.permissionGroups.regulator[0],cdId=c.permissionGroups.cdResetter[0];
+    if(!regulator||!cdId)return [];
+    const threshold=guild.roles.cache.get(regulator)?.position;
+    if(threshold===undefined)return [];
+    return guild.roles.cache.filter(role=>role.position>=threshold&&!role.managed&&role.id!==guild.id).map(role=>role.id);
   }
 }
