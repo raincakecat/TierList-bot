@@ -17,7 +17,7 @@ config.community.guildId=guild;
 for(const group of Object.keys(config.permissionGroups))config.permissionGroups[group]=[role];
 for(const key of Object.keys(config.channels))config.channels[key]=role;
 for(const mode of config.gameModes){mode.testerRoleIds=[role];for(const region of Object.values(mode.regions)){region.waitlistRoleId=role;region.queueChannelId=role;region.testCategoryId=role;}mode.highTestsCategoryId=role;mode.normalCooldown='0';mode.highCooldown='0';}
-const dir=await mkdtemp(join(tmpdir(),'lunar-24-queues-')),parent=new Store(new SQLiteAdapter(join(dir,'load.sqlite'),guild));
+const dir=await mkdtemp(join(tmpdir(),'tierlist-24-queues-')),parent=new Store(new SQLiteAdapter(join(dir,'load.sqlite'),guild));
 try{
  const deployment=new SharedDeployment(parent);await deployment.attach(guild,'sword');
  const scope=new ModeScope(new ConfigFile('unused',config)),store=new ContextStore(deployment,guild,scope),service=new Service(store,()=>scope.file.value);

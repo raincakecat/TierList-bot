@@ -15,8 +15,8 @@ export class CrossGuildRoleSync {
     const grants=new Set((await this.store.read(false)).roleSyncGrants?.[id]??[]);
     const add=[...new Set(rules.mappings.filter(rule=>original?.roles.cache.has(rule.sourceRoleId)&&!member.roles.cache.has(rule.targetRoleId)).map(rule=>rule.targetRoleId))];
     const remove=[...grants].filter(role=>rules.mappings.some(rule=>rule.targetRoleId===role)&&!rules.mappings.some(rule=>rule.targetRoleId===role&&original?.roles.cache.has(rule.sourceRoleId)));
-    if(add.length){for(const role of add)grants.add(role);await this.store.change(s=>{(s.roleSyncGrants??={})[id]=[...grants];});await member.roles.add(add,'Synced from Lunar Tiers');}
-    if(remove.length){const held=remove.filter(role=>member.roles.cache.has(role));if(held.length)await member.roles.remove(held,'No longer held in Lunar Tiers');for(const role of remove)grants.delete(role);await this.store.change(s=>{(s.roleSyncGrants??={})[id]=[...grants];});}
+    if(add.length){for(const role of add)grants.add(role);await this.store.change(s=>{(s.roleSyncGrants??={})[id]=[...grants];});await member.roles.add(add,'Synced from TierList Bot');}
+    if(remove.length){const held=remove.filter(role=>member.roles.cache.has(role));if(held.length)await member.roles.remove(held,'No longer held in TierList Bot');for(const role of remove)grants.delete(role);await this.store.change(s=>{(s.roleSyncGrants??={})[id]=[...grants];});}
     await this.afterSync?.(member);
   }
 }

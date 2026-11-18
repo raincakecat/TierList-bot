@@ -77,13 +77,13 @@ def frame(canvas, doc):
     canvas.line(48, 43, w-48, 43)
     canvas.setFillColor(colors.HexColor('#62758B'))
     canvas.setFont(regular, 8)
-    canvas.drawString(48, 29, 'LUNAR TIERS  /  SETUP & OPERATIONS  /  v0.2.0')
+    canvas.drawString(48, 29, 'TIERLIST BOT  /  SETUP & OPERATIONS  /  v0.2.0')
     canvas.drawRightString(w-48, 29, str(doc.page))
     canvas.restoreState()
 
 destination = root / 'docs/Full-Setup-Guide.pdf'
 SimpleDocTemplate(str(destination), pagesize=(612,792), leftMargin=48, rightMargin=48,
-                  topMargin=42, bottomMargin=58, title='Lunar Tiers - Full Setup Guide',
+                  topMargin=42, bottomMargin=58, title='TierList Bot - Full Setup Guide',
                   author='TierList-bot project', subject='Installation, configuration, hosting and recovery').build(
                       story, onFirstPage=frame, onLaterPages=frame)
 print(f'Created {destination}')

@@ -4,7 +4,7 @@ import {REST,Routes} from 'discord.js';
 
 const apply=process.argv.includes('--apply');
 const main=JSON.parse(await readFile(process.env.MAIN_CONFIG??'data/configs/crystal-consolidated.json','utf8'));
-const supportPath=process.env.SUPPORT_CONFIG??'data/configs/lunar-support.json';
+const supportPath=process.env.SUPPORT_CONFIG??'data/configs/support.json';
 const support=JSON.parse(await readFile(supportPath,'utf8'));
 const guild=support.community.guildId,rootGuild=main.community.guildId;
 if(!guild||!rootGuild||guild===rootGuild||support.modules.testing||!process.env.DISCORD_TOKEN)throw Error('Expected distinct main/support guilds, disabled support testing, and DISCORD_TOKEN.');

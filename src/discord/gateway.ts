@@ -184,7 +184,7 @@ export class Gateway {
     await this.queues();await this.lists();
   }
   async supportPanels(){const c=this.config;if(!c.modules.supportTickets)return;
-    if(!c.supportRequestsEnabled){const channel=await this.text(c.channels.supportPanel!);await this.upsertPanel('support:0',channel,{embeds:[new EmbedBuilder().setTitle('Support has moved').setDescription('Open a support ticket in the Lunar Support server. Existing tickets here can still be finished.').setColor(c.branding.colors.panel as `#${string}`)],components:c.supportRedirectUrl?[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel('Open Lunar Support').setStyle(ButtonStyle.Link).setURL(c.supportRedirectUrl))]:[]});await this.removePanelPages('support',new Set(['support:0']),channel.id);return;}
+    if(!c.supportRequestsEnabled){const channel=await this.text(c.channels.supportPanel!);await this.upsertPanel('support:0',channel,{embeds:[new EmbedBuilder().setTitle('Support has moved').setDescription('Open a support ticket in the support server. Existing tickets here can still be finished.').setColor(c.branding.colors.panel as `#${string}`)],components:c.supportRedirectUrl?[new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel('Open Support server').setStyle(ButtonStyle.Link).setURL(c.supportRedirectUrl))]:[]});await this.removePanelPages('support',new Set(['support:0']),channel.id);return;}
     const kinds=c.supportTicketTypes.filter(t=>t.enabled),keep=new Set<string>(),channel=await this.text(c.channels.supportPanel!);
     for(let page=0;page<Math.ceil(kinds.length/15);page++){
       const key=`support:${page}`,slice=kinds.slice(page*15,page*15+15),components:ActionRowBuilder<ButtonBuilder>[]=[];keep.add(key);

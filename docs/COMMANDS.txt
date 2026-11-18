@@ -109,7 +109,7 @@ Staff may handle assigned test tickets without the selected mode's Tester role.
 The three regional queue categories each contain nine mode waitlist channels.
 High Testing Lists has one managed forum post per mode; all results use one channel.
 
-LUNAR SUPPORT SERVER
+SUPPORT SERVER
 General Support: Staff can view and close; Staff can view its archive.
 Player Reports: Regulator and above handle live tickets; High Staff views the archive.
 Staff Reports and Restriction Appeals: High Staff only for live and archive access.

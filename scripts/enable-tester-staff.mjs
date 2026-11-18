@@ -3,7 +3,7 @@ import {REST,Routes} from 'discord.js';
 
 const apply=process.argv.includes('--apply');
 const mainPath=process.env.MAIN_CONFIG??'config.json';
-const supportPath=process.env.SUPPORT_CONFIG??'data/configs/lunar-support.json';
+const supportPath=process.env.SUPPORT_CONFIG??'data/configs/support.json';
 const main=JSON.parse(await readFile(mainPath,'utf8'));
 const support=JSON.parse(await readFile(supportPath,'utf8'));
 if(main.community.guildId===support.community.guildId||support.roleSync?.sourceGuildId!==main.community.guildId)throw Error('Expected the configured main and support guilds.');

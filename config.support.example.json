@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "community": {
     "guildId": null,
-    "name": "Lunar Support",
+    "name": "Support server",
     "timezone": "America/New_York"
   },
   "database": {
@@ -15,7 +15,7 @@
       "connectionStringEnv": "DATABASE_URL"
     },
     "sqlite": {
-      "file": "./data/lunar.sqlite"
+      "file": "./data/tierlist.sqlite"
     }
   },
   "modules": {

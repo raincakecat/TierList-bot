@@ -55,13 +55,13 @@ client.once('clientReady',()=>void(async()=>{try{
       {id:client.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.EmbedLinks,PermissionFlagsBits.AttachFiles,PermissionFlagsBits.ManageMessages]},
       ...readers[spec.key].map(id=>({id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.ReadMessageHistory],deny:[PermissionFlagsBits.SendMessages]}))
     ];
-    if(!channel)channel=await guild.channels.create({name:spec.name,type:ChannelType.GuildText,parent:parents[spec.key]??undefined,permissionOverwrites:overwrites,topic:`Lunar Tiers ${spec.title.toLowerCase()} — commands, permissions and when to use them.`});
+    if(!channel)channel=await guild.channels.create({name:spec.name,type:ChannelType.GuildText,parent:parents[spec.key]??undefined,permissionOverwrites:overwrites,topic:`TierList Bot ${spec.title.toLowerCase()} — commands, permissions and when to use them.`});
     else{await channel.permissionOverwrites.set(overwrites,'Requested role-specific guide visibility');if(channel.name!==spec.name)await channel.setName(spec.name);}
     entry.channelId=channel.id;entry.source=spec.source;entry.readerRoleIds=readers[spec.key];await persist();
     const sections=pages(sources.get(spec.key),spec.title),history=await channel.messages.fetch({limit:100}),ids=[];
     for(let n=0;n<sections.length;n++){
       const section=sections[n],title=n===0?spec.title:`${spec.title} · ${section.heading}`;
-      const embed=new EmbedBuilder().setAuthor({name:c.community.name,...(c.branding.iconUrl?{iconURL:c.branding.iconUrl}:{})}).setTitle(title).setDescription(section.description).setColor(c.branding.colors.panel).setFooter({text:`Lunar Tiers · ${spec.title} · ${n+1}/${sections.length}`});
+      const embed=new EmbedBuilder().setAuthor({name:c.community.name,...(c.branding.iconUrl?{iconURL:c.branding.iconUrl}:{})}).setTitle(title).setDescription(section.description).setColor(c.branding.colors.panel).setFooter({text:`TierList Bot · ${spec.title} · ${n+1}/${sections.length}`});
       let message=entry.messageIds[n]?await channel.messages.fetch(entry.messageIds[n]).catch(e=>{if(e.code===10008)return null;throw e;}):null;
       message??=history.find(m=>m.author.id===client.user.id&&m.embeds[0]?.title===title);
       if(message&&message.author.id!==client.user.id)throw Error('Refusing to overwrite a guide message from another author.');

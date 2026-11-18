@@ -36,10 +36,10 @@ for(const [id,{mode,rank}] of targets){
   const role=byId.get(id),old=role.icon;
   if(old){const response=await fetch(`https://cdn.discordapp.com/role-icons/${id}/${old}.png?size=64`);if(response.ok&&Buffer.from(await response.arrayBuffer()).equals(icons[rank]))continue;}
   const icon=`data:image/png;base64,${icons[rank].toString('base64')}`;
-  await rest.patch(Routes.guildRole(guild,id),{body:{icon},reason:`Lunar ${mode} ${rank} trophy icon`});
+  await rest.patch(Routes.guildRole(guild,id),{body:{icon},reason:`TierList ${mode} ${rank} trophy icon`});
   changed++;console.log(`Set ${mode} ${rank}`);
 }
-for(const {mode,rank,id} of untargeted)if(byId.get(id).icon){await rest.patch(Routes.guildRole(guild,id),{body:{icon:null},reason:`Lunar ${mode} ${rank} has no trophy icon`});changed++;console.log(`Cleared ${mode} ${rank}`);}
+for(const {mode,rank,id} of untargeted)if(byId.get(id).icon){await rest.patch(Routes.guildRole(guild,id),{body:{icon:null},reason:`TierList ${mode} ${rank} has no trophy icon`});changed++;console.log(`Cleared ${mode} ${rank}`);}
 const verified=new Map((await rest.get(Routes.guildRoles(guild))).map(role=>[role.id,role]));
 const missing=[...targets].filter(([id])=>!verified.get(id)?.icon);
 const unexpected=untargeted.filter(x=>verified.get(x.id)?.icon);

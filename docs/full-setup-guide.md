@@ -1,13 +1,13 @@
-# Lunar Tiers Discord Bot
+# TierList Bot
 ## Full installation and operations guide
 
-Version 0.2.0 | Updated November 15, 2026
+Version 0.2.0 | Updated November 18, 2026
 
 This package contains a configurable Discord bot for account linking, regional testing across nine game modes, tier lists, support tickets, deadlines, restrictions, and backups. One bot process can serve a testing server and a separate support server using one database.
 
 The full-package ZIP includes compiled JavaScript, TypeScript source, automated tests, pinned dependencies, configuration templates, SQL setup, launchers, and this guide. Node.js and downloaded dependencies are not bundled. Internet access is needed for installation and normal operation.
 
-Release status: 224 automated tests pass locally. The consolidated testing and support configuration is deployed privately. This public package contains source and generic examples; validate permissions, hosting, database, and recovery in your own server. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
+Release status: 235 automated tests pass locally. This public package contains source and generic examples; validate permissions, hosting, database, and recovery in your own server. PostgreSQL automated tests use an emulator. CI outcomes should be reviewed separately.
 
 Read the quick start for the shortest installation route. The later sections explain configuration, permissions, hosting, recovery, migration, and troubleshooting. Commands shown in this guide must be entered in the specified place: host terminal commands on the machine running the bot, and slash commands inside your Discord server.
 
@@ -505,7 +505,7 @@ Large transcripts are uploaded in numbered parts before channel deletion. Result
 
 Supabase stores large records in a compressed envelope and polls revisions instead of downloading unchanged full state. Heartbeats use a separate small lease record. Existing plain records and portable JSON backups remain supported. Before installing older code that lacks compression support, stop the bot and run scripts/restore-plain-supabase-state.mjs with --confirm using the current runtime.
 
-For a single-host installation, SQLite removes remote database bandwidth dependence. The stopped-service scripts/move-to-local-sqlite.mjs --confirm utility validates and copies a Supabase source to a new data/lunar.sqlite, preserves a private source export and configuration, verifies the copy, then switches configuration. It refuses an active source lease or existing destination. Never run both backends as live writers. The retained source becomes historical; do not switch back without transferring newer local changes.
+For a single-host installation, SQLite removes remote database bandwidth dependence. The stopped-service scripts/move-to-local-sqlite.mjs --confirm utility validates and copies a Supabase source to a new data/tierlist.sqlite, preserves a private source export and configuration, verifies the copy, then switches configuration. It refuses an active source lease or existing destination. Never run both backends as live writers. The retained source becomes historical; do not switch back without transferring newer local changes.
 
 Daily validated exports retain ten automatic backups. They depend on the bot running and do not protect against loss of the VM disk. Keep an independent disk/off-host backup, including configuration and evidence. Host moves do not erase prior remote usage charges.
 
@@ -568,7 +568,7 @@ Before launch, rehearse verification, conflicting UUID claims, two simultaneous 
 The repeatable local check is npm run build followed by node scripts/load-multimode.mjs. On the home Linux VM, 24 concurrent reservations across eight modes and three regions completed in 511 ms with no duplicates, using 300 player profiles. These are local state timings, not Discord API or archive-upload guarantees. The live second-server rehearsal is still required. See docs/MULTI-SERVER.md for the complete checklist. The future Minecraft mod/API is outside this update.
 
 ---PAGE---
-# Consolidated Lunar Tiers layout
+# Consolidated TierList Bot layout
 
 The main server supports Crystal, Sword, Axe, SMP, Pot, Mace, UHC, Nethpot, and Spear Mace. NA, EU, and AS/AU each have one queue category with a waitlist channel for every mode. There is one results channel and one High Testing Lists forum with a managed post per mode. The post groups NA, EU, then AS/AU; within each region it orders HT3, LT2, HT2, then LT1. Rank and cooldown state remains separate by mode.
 

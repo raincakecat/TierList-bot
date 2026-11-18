@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {configSchema} from '../src/config.js';
 import {supportGuideEmbed,supportPanelEmbed} from '../src/discord/support-surfaces.js';
 
-test('support cards keep five routes readable with the Lunar logo',async()=>{
+test('support cards keep five routes readable with the TierList logo',async()=>{
   const config=configSchema.parse(JSON.parse(await readFile('config.support.example.json','utf8')));
   const logo='https://cdn.discordapp.com/attachments/123/456/logo.webp';
   const panel=supportPanelEmbed(config,logo).toJSON();

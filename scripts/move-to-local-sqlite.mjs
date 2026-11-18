@@ -9,7 +9,7 @@ import {validateState, decodeBackup} from '../dist/src/storage/backups.js';
 if(process.argv[2]!=='--confirm')throw Error('Stop the bot service before running this command with --confirm.');
 const file=await ConfigFile.load(process.env.BOT_CONFIG??'config.json'), c=file.value;
 if(c.database.backend!=='supabase')throw Error('Expected Supabase source; configuration has not been changed.');
-const target=resolve('data/lunar.sqlite');
+const target=resolve('data/tierlist.sqlite');
 try{await access(target);throw Error('Destination already exists; refusing to overwrite it.');}catch(e){if(e.code!=='ENOENT')throw e;}
 const directory=resolve('data/preflight',`sqlite-cutover-${Date.now()}`);
 await mkdir(directory,{recursive:true,mode:0o700});
@@ -37,7 +37,7 @@ try{
   const latest=await source.read();
   if(JSON.stringify(latest)!==JSON.stringify(original))throw Error('Source changed during transfer. Configuration unchanged.');
   await destination.close();destination=undefined;await chmod(target,0o600);
-  const next=structuredClone(c);next.database.backend='sqlite';next.database.sqlite.file='data/lunar.sqlite';
+  const next=structuredClone(c);next.database.backend='sqlite';next.database.sqlite.file='data/tierlist.sqlite';
   await file.save(next);
   const report={backend:'sqlite',players:Object.keys(saved.players).length,tickets:Object.keys(saved.tickets).length,jobs:Object.keys(saved.jobs).length,leaves:Object.keys(saved.leaves??{}).length,maintenance:saved.maintenance,sourceBackupSha256:createHash('sha256').update(raw).digest('hex'),verified:true,sourceUnchanged:true};
   await writeFile(join(directory,'verification.json'),JSON.stringify(report,null,2)+'\n',{mode:0o600});

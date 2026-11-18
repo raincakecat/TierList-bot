@@ -219,7 +219,7 @@ export class Runtime {
       const createsRequest=(i.isButton()&&['waitlist','join','support'].includes(i.customId.split(':')[0]!))||(i.isStringSelectMenu()&&i.customId==='support')||(i.isModalSubmit()&&i.customId==='verification')||(i.isChatInputCommand()&&['start','next','forcetest','set-ticket','maketestticket'].includes(i.commandName));
       if(createsRequest){
         const support=(i.isButton()&&i.customId.startsWith('support:'))||(i.isStringSelectMenu()&&i.customId==='support')||(i.isChatInputCommand()&&i.commandName==='set-ticket'&&i.options.getString('type')!=='test');
-        if(support&&!this.file.value.supportRequestsEnabled&&!(i.isChatInputCommand()&&i.commandName==='set-ticket'))throw new UserError('New support requests are handled in the Lunar Support server.');
+        if(support&&!this.file.value.supportRequestsEnabled&&!(i.isChatInputCommand()&&i.commandName==='set-ticket'))throw new UserError('New support requests are handled in the support server.');
         const key=i.isButton()?i.customId.split(':')[1]:i.isStringSelectMenu()?i.values[0]:i.isChatInputCommand()?i.options.getString('type')??undefined:undefined;
         if(requestSetupErrors(this.file.value,this.setupErrors,support?'support':'testing',support?key:undefined).length)throw new UserError(`An administrator must finish ${support?'this support type’s':'testing'} configuration before new requests are accepted.`);
       }

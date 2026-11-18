@@ -18,7 +18,7 @@ Keep sensitive evidence in its ticket and type-specific archive. Do not move a s
 
 `/forcestopqueue region:NA mode:Sword` — Stop sessions and clear that mode's regional queue when it must close.
 
-`/forceresult member:@player tier:HT3 region:NA mode:Sword` — Assign a reviewed result outside an active test. In Lunar Support, Regulator and above can use `/migrate member:@player tier:HT3 region:NA source:Community mode:Sword` to record a migrated rank in the main server. It posts in the main server's #migrations channel. An unverified player needs `ign`. Check the mode, region, previous rank and supporting evidence first; finish any existing test in that mode before forcing a result.
+`/forceresult member:@player tier:HT3 region:NA mode:Sword` — Assign a reviewed result outside an active test. In the support server, Regulator and above can use `/migrate member:@player tier:HT3 region:NA source:Community mode:Sword` to record a migrated rank in the main server. It posts in the main server's #migrations channel. An unverified player needs `ign`. Check the mode, region, previous rank and supporting evidence first; finish any existing test in that mode before forcing a result.
 
 `/deadline set duration:3h` — Add or replace a deadline in the current ticket. Durations are **1m–14d**. `/deadline clear` removes it. Expiry pings the setter for review; it does not close the ticket.
 
@@ -40,7 +40,7 @@ The forum is generated from these mode records. Don't maintain a second manual l
 
 The Minecraft identity is shared across servers. Changing that shared account requires **Owner-confirmed** `/unverify scope:global`; it clears verification in both servers and is blocked while either has an open test. Do not work around identity conflicts by assigning a UUID to another Discord account.
 
-`/resetcooldown member:@player mode:Sword` — Clears that player's cooldown in the selected game mode. In the main server, Owner or CD Resetter can use it; in Lunar Support, Regulator and above can use it.
+`/resetcooldown member:@player mode:Sword` — Clears that player's cooldown in the selected game mode. In the main server, Owner or CD Resetter can use it; in the support server, Regulator and above can use it.
 
 **Owner only:** `/setcooldown member:@player days:4 mode:Sword` sets the saved cooldown directly. `/configcooldown kind:normal duration:4d mode:Sword` changes the duration for future completed tests; use `high` for high tests and `0` for no cooldown.
 

@@ -18,14 +18,14 @@ export function supportPanelEmbed(config:Config,logoUrl?:string){
 export function supportGuideEmbed(config:Config,panelChannelId:string,logoUrl?:string){
   const embed=new EmbedBuilder()
     .setColor(config.branding.colors.panel as `#${string}`)
-    .setTitle('Lunar Support')
+    .setTitle('Support server')
     .setDescription(`Need help? Open a ticket in <#${panelChannelId}>.`)
     .addFields(
       {name:'01  ·  General Support',value:'Questions or issues with the server.',inline:false},
       {name:'02  ·  Player Report',value:'Report a player. Include their name and any proof you have.',inline:false},
       {name:'03  ·  Staff Report',value:'Report a staff member.',inline:false},
       {name:'04  ·  Restriction Appeal',value:'Appeal a restriction.',inline:false},
-      {name:'05  ·  Partnership Request',value:'Ask about a partnership with Lunar Tiers.',inline:false},
+      {name:'05  ·  Partnership Request',value:'Ask about a partnership with TierList Bot.',inline:false},
     )
     .setFooter({text:'Open one ticket per issue  •  Add screenshots if you have them'});
   if(logoUrl)embed.setThumbnail(logoUrl);
