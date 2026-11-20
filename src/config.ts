@@ -19,6 +19,7 @@ export const configSchema = z.object({
   supportRequestsEnabled:z.boolean().default(true),
   supportRedirectUrl:z.url().nullable().default(null),
   staffTitles:z.object({staffRoleIds:ids.default([]),highStaffRoleIds:ids.default([]),ticketSupportRoleId:id.optional()}).strict().default({staffRoleIds:[],highStaffRoleIds:[]}),
+  deadlineRoleIds:ids.default([]),
   roleSync:z.object({sourceGuildId:id.unwrap(),mappings:z.array(z.object({sourceRoleId:id.unwrap(),targetRoleId:id.unwrap()}).strict()).default([])}).strict().nullable().default(null),
   activeMode:z.object({key:z.string(),name:z.string()}).optional(),
   modeForum:z.object({enabled:z.boolean(),channelId:id,threadIds:z.record(z.string(),z.string()).default({})}).strict().default({enabled:false,channelId:null,threadIds:{}}),

@@ -68,6 +68,6 @@ Approved leave exempts overlapping monthly quota periods. It does not stop you t
 
 **Bot Admin:** unlinking a wrong account, tester-role assignment, cooldown settings and bot health.
 
-**Regulator:** forced tests/results, queue shutdowns, migrations and ticket deadlines.
+**Mod:** `/deadline set duration:3h` or `/deadline clear` in a ticket you can access. Map the Mod role in `deadlineRoleIds`. Regulator and above can also set deadlines. **Regulator:** forced tests/results, queue shutdowns and migrations.
 
 **High Staff:** sensitive reports and appeals. **Owner:** setup, recovery and confirmed bulk actions. Use the High Staff guide for the full advanced reference.
